@@ -38,7 +38,11 @@ try{ const t=localStorage.getItem('inv-theme'); if(t) document.documentElement.d
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-html,body{min-height:100%;max-width:100%;overflow-x:hidden}
+html,body{min-height:100%;max-width:100%}
+/* lo scorrimento è SOLO quello della pagina: body non deve diventare un contenitore a scorrimento
+   (con overflow-x:hidden lo diventava, e sul Mac la rotella/trackpad non scorreva più) */
+html{overflow-x:hidden}
+body{overflow-x:clip}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.4;
   padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 img{max-width:100%}
@@ -105,7 +109,7 @@ button{font-family:inherit;cursor:pointer;color:inherit}
 
 
 /* Scatta: tutto in una schermata, senza scorrere */
-html,body{overscroll-behavior-y:none}
+html{overscroll-behavior-y:none}
 .chips.hscroll{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-right:-12px;padding-right:12px}
 .chips.hscroll::-webkit-scrollbar{display:none}
 .chips.hscroll>*{flex:0 0 auto;max-width:none}
@@ -493,7 +497,7 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 
   <details class="card pad set">
     <summary><h3>Informazioni</h3><span class="ss" id="ssInfo"></span><span class="chev">›</span></summary>
-    <div class="sub">v5.2.0 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
+    <div class="sub">v5.2.1 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
   </details>
 </section>
 

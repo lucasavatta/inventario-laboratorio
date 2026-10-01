@@ -143,6 +143,13 @@ module.exports = async function(){
     C.check(await p.locator('#syncToken').isVisible(), 'la sezione si apre con un tocco');
     await p.setViewportSize({width:393, height:852});
 
+    console.log('app · 8c. scorrimento con rotella/trackpad (Mac)');
+    const big = await device(b, srv.url, 'Mac');
+    await big.evaluate(async()=>{ for(let k=0;k<40;k++) index.push({id:uid()+k,box:'B01',cat:'Vario',desc:'Pezzo '+k,tags:[],qty:1,state:'Nuovo',hasPhoto:false,nfc:false,lotId:null,light:false,marker:null,ts:Date.now()}); await saveIndex(); refreshAll(); openBox('B01'); });
+    await big.waitForTimeout(300); await big.mouse.move(700,450); await big.mouse.wheel(0,600); await big.waitForTimeout(400);
+    C.check(await big.evaluate(()=>scrollY>300), 'scatola aperta: la rotella fa scorrere la pagina');
+    C.check(await big.evaluate(()=>{ const c=getComputedStyle(document.body); return c.overflowY==='visible' && c.overscrollBehaviorY==='auto'; }), 'body non è un contenitore a scorrimento (era la causa del blocco)');
+
     console.log('app · 9. tutto dentro lo schermo (320 px, iPhone SE)');
     await p.setViewportSize({width:320, height:640});
     const bad=[];
