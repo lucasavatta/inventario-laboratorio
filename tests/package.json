@@ -1,0 +1,7 @@
+{
+  "name": "inventario-officina-tests",
+  "private": true,
+  "description": "Test end-to-end dell'app (Playwright + finto GitHub)",
+  "scripts": { "test": "node run-all.js" },
+  "devDependencies": { "playwright": "^1.48.0" }
+}

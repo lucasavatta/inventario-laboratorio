@@ -55,6 +55,8 @@ sw.js                 service worker (funzionamento offline)
 manifest.webmanifest  icona e nome
 jszip.min.js          creazione/lettura ZIP (MIT, vedi jszip-LICENSE.md)
 icon-*.png            icone
+tests/                test automatici (cd tests && npm install && npm test)
+CLAUDE.md             istruzioni per sviluppare il progetto con Claude Code
 ```
 
 Aggiornare l'app: modificare i file e fare push; GitHub Pages pubblica in 1–2 minuti. Alzare `VERSION` in `sw.js` a ogni rilascio.
