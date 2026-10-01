@@ -195,7 +195,7 @@ header{padding-top:calc(14px + env(safe-area-inset-top))}
 
 <header>
   <h1><span class="dot"></span>Inventario Officina</h1>
-  <div class="sub">v4.2.2 · Rilievo · Lotti · Composizione · Ricerca</div>
+  <div class="sub">v4.2.3 · Rilievo · Lotti · Composizione · Ricerca</div>
   <span class="bkp" id="bkpBadge" style="display:none"></span>
 </header>
 
@@ -415,9 +415,9 @@ header{padding-top:calc(14px + env(safe-area-inset-top))}
     <button class="btn-ghost" id="nfcDirect" style="width:100%;margin-top:8px;padding:11px;display:none">Scrivi direttamente sul tag</button>
     <ol class="steps" id="nfcSteps">
       <li>Apri l'app gratuita <b>NFC Tools</b> → <b>Scrivi</b></li>
-      <li><b>Aggiungi un record</b> → <b>URL / URI</b> → incolla il link → OK</li>
+      <li><b>Aggiungi un record</b> → <b>URL / URI</b>: lascia <b>https://</b> già scelto e <b>incolla</b> (il link è copiato senza https://) → OK</li>
       <li><b>Scrivi</b> e avvicina il tag alla parte alta dell'iPhone</li>
-      <li>Fatto: d'ora in poi basta avvicinare l'iPhone al tag e si apre la scatola qui</li>
+      <li>Fatto: avvicinando l'iPhone sbloccato al tag si apre la scatola. Su iPhone i tag si aprono sempre in <b>Safari</b>: collega la sincronizzazione anche lì (Scatole → Copia la chiave)</li>
     </ol>
     <button class="btn-ghost" id="nfcClose" style="width:100%;margin-top:12px;padding:11px">Chiudi</button>
   </div>
@@ -814,7 +814,9 @@ function nfcSheet(title, sub, url){
 }
 $('nfcClose').onclick=()=>$('nfcBg').classList.remove('show');
 $('nfcCopy').onclick=async ()=>{
-  try{ await navigator.clipboard.writeText(nfcPayload); toast('Link copiato ✓ ora incollalo in NFC Tools'); }
+  // NFC Tools mette già "https://" davanti nel record URL: copio il link senza, altrimenti diventa https://https://…
+  const bare=nfcPayload.replace(/^https?:\/\//,'');
+  try{ await navigator.clipboard.writeText(bare); toast('Link copiato ✓ ora incollalo in NFC Tools'); }
   catch(e){ const r=document.createRange(); r.selectNodeContents($('nfcUrl')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('Tieni premuto sul link → Copia'); }
 };
 $('nfcDirect').onclick=async ()=>{

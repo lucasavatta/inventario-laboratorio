@@ -1,6 +1,6 @@
 /* Service worker: l'app funziona anche senza rete (in officina).
    I DATI non passano di qui: restano in IndexedDB sul dispositivo. */
-const VERSION = 'inv-v4.2.2';
+const VERSION = 'inv-v4.2.3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './jszip.min.js',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
