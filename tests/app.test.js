@@ -16,11 +16,30 @@ const FAKE_SR = () => {
 // riconoscimento che non parte mai (come capitava su iOS)
 const DEAD_SR = () => { window.SpeechRecognition = window.webkitSpeechRecognition = class { start(){} stop(){} abort(){} }; };
 const NO_SR = () => { delete window.webkitSpeechRecognition; delete window.SpeechRecognition; };
+// finto foglio "Condividi" del telefono: registra che cosa viene passato (in __shareAbort l'utente annulla)
+const FAKE_SHARE = () => {
+  window.__shared=[];
+  Object.defineProperty(navigator,'canShare',{configurable:true, value:d=>!!(d&&d.files&&d.files.length)});
+  Object.defineProperty(navigator,'share',{configurable:true, value:d=>{
+    if(window.__shareAbort) return Promise.reject(Object.assign(new Error('annullato'),{name:'AbortError'}));
+    window.__shared.push({files:(d.files||[]).map(f=>({type:f.type,size:f.size})), text:d.text}); return Promise.resolve(); }});
+};
 
 module.exports = async function(){
   const srv = await startServer(); const b = await launch(); const C = checker();
   const zipPath = path.join(os.tmpdir(), 'inventario-test.zip');
   try{
+    console.log('app · 0. rilascio: service worker presente, stessa versione, app apribile senza rete');
+    const swTxt=fs.readFileSync(path.join(__dirname,'..','sw.js'),'utf8'), htmlTxt=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+    const vSw=(swTxt.match(/VERSION = 'inv-v([\d.]+)'/)||[])[1], vHtml=(htmlTxt.match(/class="sub">v([\d.]+) ·/)||[])[1];
+    C.check(!!vSw && vSw===vHtml, 'sw.js e index.html hanno la stessa versione (v'+vHtml+' / v'+vSw+')');
+    const octx = await b.newContext({viewport:{width:393,height:852}}); const off = await octx.newPage();
+    await off.goto(srv.url); await off.evaluate(()=>navigator.serviceWorker.ready); await off.waitForFunction(()=>!!navigator.serviceWorker.controller,null,{timeout:8000}).catch(()=>{});
+    await off.waitForTimeout(500); await octx.setOffline(true);
+    const offOk = await off.reload().then(()=>off.evaluate(()=>!!document.getElementById('saveBtn') && typeof JSZip!=='undefined')).catch(()=>false);
+    C.check(offOk, 'senza rete l\'app si riapre lo stesso (service worker)');
+    await octx.close();
+
     console.log('app · 1. rilievo, foto lotto, segna/ritaglia, componi');
     const p = await device(b, srv.url, 'iPhone', {acceptDownloads:true, permissions:['clipboard-read','clipboard-write'], init:NO_SR});
     C.check(await p.locator('#v-cap .recover').count()===1, 'app vuota e scollegata: scheda "Collega e recupera"');
@@ -128,6 +147,9 @@ module.exports = async function(){
     await p.click('nav button[data-v=v-cap]'); await p.click('#segSingle'); await p.waitForTimeout(200);
     const fit = await p.evaluate(()=>({sh:document.documentElement.scrollHeight, ih:innerHeight, save:document.getElementById('saveBtn').getBoundingClientRect().bottom, nav:document.querySelector('nav').getBoundingClientRect().top}));
     C.check(fit.sh<=fit.ih && fit.save<=fit.nav, 'Scatta: nessuno scorrimento a 393×640 e Salva sopra la barra ('+JSON.stringify(fit)+')');
+    await p.setInputFiles('#photoInput',IMG); await p.waitForTimeout(300);
+    C.check(await p.evaluate(()=>!!document.querySelector('#photoZone .ai-btn') && document.documentElement.scrollHeight<=innerHeight && document.getElementById('saveBtn').getBoundingClientRect().bottom<=document.querySelector('nav').getBoundingClientRect().top), 'idem con la foto e il pulsante ✨ Cos\'è?');
+    await p.click('#photoZone .photo-x'); await p.waitForTimeout(100);
     await p.click('#tagInput'); await p.waitForTimeout(150);
     C.check(await p.locator('#tagSugg:not([hidden]) button').count()>0, 'tag già usati proposti mentre scrivi i tag');
     await p.locator('#tagSugg button').first().dispatchEvent('pointerdown'); await p.waitForTimeout(100);
@@ -149,6 +171,76 @@ module.exports = async function(){
     await big.waitForTimeout(300); await big.mouse.move(700,450); await big.mouse.wheel(0,600); await big.waitForTimeout(400);
     C.check(await big.evaluate(()=>scrollY>300), 'scatola aperta: la rotella fa scorrere la pagina');
     C.check(await big.evaluate(()=>{ const c=getComputedStyle(document.body); return c.overflowY==='visible' && c.overscrollBehaviorY==='auto'; }), 'body non è un contenitore a scorrimento (era la causa del blocco)');
+
+    console.log('app · 8d. Chiedi a Claude: foto e domanda condivise, risposta incollata');
+    const ai = await device(b, srv.url, 'iPhone', {permissions:['clipboard-read','clipboard-write'], init:FAKE_SHARE});
+    let choosers=0; ai.on('filechooser', ()=>choosers++);
+    const aiBtn = sel => ai.evaluate(s=>{ const e=document.querySelector(s); return e?e.textContent:null; }, sel);
+    await ai.setViewportSize({width:393, height:640});
+    C.check(await aiBtn('#photoZone .ai-btn')===null, 'senza foto il pulsante non c\'è');
+    const h0 = await ai.evaluate(()=>document.getElementById('capSingle').getBoundingClientRect().height);
+    await ai.setInputFiles('#photoInput',IMG); await ai.waitForTimeout(500);
+    C.check(/Cos/.test(await aiBtn('#photoZone .ai-btn')), 'con la foto compare ✨ Cos\'è? sopra la foto');
+    C.check(await ai.evaluate(()=>document.getElementById('capSingle').getBoundingClientRect().height)===h0, 'il pulsante sta sopra la foto: il modulo non si allunga');
+    await ai.fill('#desc','preso dal quad');
+    await ai.evaluate(()=>{ window.__shareAbort=true; }); await ai.click('#photoZone .ai-btn'); await ai.waitForTimeout(200);
+    C.check(await ai.evaluate(()=>aiWait===null && __shared.length===0), 'condivisione annullata: non cambia niente');
+    await ai.evaluate(()=>{ window.__shareAbort=false; }); await ai.click('#photoZone .ai-btn'); await ai.waitForTimeout(300);
+    const sh = await ai.evaluate(()=>__shared[0]);
+    C.check(!!sh && sh.files.length===1 && sh.files[0].type==='image/jpeg' && sh.files[0].size>500, 'a Claude arriva la foto');
+    C.check(!!sh && /Nome:/.test(sh.text) && /Categoria: una tra: Droni \/ Elettronica; Falegnameria/.test(sh.text) && /Quello che so già: preso dal quad/.test(sh.text), 'e la domanda già scritta, con le categorie dell\'archivio e quello che hai già scritto');
+    C.check(await ai.evaluate(()=>navigator.clipboard.readText())===(sh&&sh.text), 'la domanda è anche negli appunti (se la chat non la riceve si incolla)');
+    C.check(/Incolla/.test(await aiBtn('#photoZone .ai-btn')) && choosers===0, 'il pulsante diventa 📋 Incolla e non riapre la fotocamera');
+    await ai.click('#photoZone .ai-btn'); await ai.waitForSelector('#dlgBg.show');
+    C.check(/Manca la risposta/.test(await ai.textContent('#dlgTitle')), 'se negli appunti c\'è ancora la domanda, lo dice');
+    await dlgOk(ai);
+    await ai.reload(); await ai.waitForTimeout(700);
+    C.check(/Incolla/.test(await aiBtn('#photoZone .ai-btn')), 'se la pagina si ricarica mentre sei su Claude, resta in attesa della risposta');
+    await ai.evaluate(()=>navigator.clipboard.writeText('**Nome:** Connettore JST-XH 4 poli\n**Descrizione:** Cavetto con connettore JST-XH, passo 2,5 mm, 4 contatti.\n**Tag:** JST, xh, cavetto, 4 poli\n**Categoria:** Elettronica\n**Dubbio:** misura il passo, 2,0 oppure 2,5 mm'));
+    await ai.click('#photoZone .ai-btn'); await ai.waitForTimeout(400);
+    const got = await ai.evaluate(()=>({desc:document.getElementById('desc').value, tags:curTags.join('|'), cat:document.getElementById('catPick').dataset.v, hint:document.getElementById('descHint').textContent, shown:document.getElementById('descHint').classList.contains('show')}));
+    C.check(got.desc==='Connettore JST-XH 4 poli — Cavetto con connettore JST-XH, passo 2,5 mm, 4 contatti · preso dal quad', 'la risposta riempie la descrizione e tiene quello che avevi scritto ('+got.desc+')');
+    C.check(got.tags==='jst|xh|cavetto|4 poli' && got.cat==='Droni / Elettronica', 'tag e categoria compilati ('+got.tags+' · '+got.cat+')');
+    C.check(got.shown && /misura il passo/.test(got.hint), 'il dubbio di Claude resta scritto sotto il campo');
+    C.check(/Cos/.test(await aiBtn('#photoZone .ai-btn')), 'dopo l\'incolla il pulsante torna ✨ Cos\'è?');
+    // risposta incollata direttamente nel campo, tutta su una riga: stesso risultato e niente accumulo
+    await ai.evaluate(()=>{ const dt=new DataTransfer(); dt.setData('text/plain','Nome: Motore 2207 Descrizione: brushless 2400KV Tag: motore, brushless Categoria: droni');
+      document.getElementById('desc').dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true})); });
+    await ai.waitForTimeout(200);
+    C.check(await ai.evaluate(()=>document.getElementById('desc').value==='Motore 2207 — brushless 2400KV · preso dal quad' && curTags.includes('brushless')), 'risposta incollata nel campo: compila da sola, senza accumulare la precedente');
+    await ai.evaluate(()=>navigator.clipboard.writeText('un testo qualsiasi')); await ai.evaluate(()=>aiSetWait('cap')); await ai.click('#photoZone .ai-btn'); await ai.waitForSelector('#dlgBg.show');
+    C.check(/Non riconosco/.test(await ai.textContent('#dlgTitle')), 'testo che non è una risposta: chiede prima di usarlo');
+    await ai.click('#dlgCancel'); await ai.waitForTimeout(200);
+    C.check(await ai.evaluate(()=>document.getElementById('desc').value.startsWith('Motore 2207')), 'e se annulli non tocca la descrizione');
+    await ai.setViewportSize({width:320, height:640}); await ai.waitForTimeout(150);
+    C.check((await overflow(ai)).length===0 && await ai.evaluate(()=>{ const e=document.querySelector('#photoZone .ai-btn'); return e.scrollWidth<=e.clientWidth; }), 'a 320 px il pulsante sta nel riquadro della foto');
+    await ai.setViewportSize({width:393, height:852});
+    await tap(ai,'#saveBtn'); await ai.waitForTimeout(300);
+    C.check(await ai.evaluate(()=>index.length===1 && index[0].tags.includes('motore') && aiWait===null) && await aiBtn('#photoZone .ai-btn')===null, 'salvato: si riparte puliti');
+    // pezzo ritagliato da una Foto Lotto
+    await ai.click('#segLot'); await ai.setInputFiles('#lotInput',IMG); await ai.waitForTimeout(200);
+    await ai.fill('#lotTitle','Cavetti'); await ai.selectOption('#lotBoxSel','__new'); await ai.fill('#lotNewBox','c01'); await tap(ai,'#saveLotBtn'); await ai.waitForTimeout(300);
+    await ai.click('nav button[data-v=v-comp]'); await ai.click('.lotcard'); await ai.waitForTimeout(300);
+    await ai.click('#modeCrop'); const cb=await ai.locator('#lotPhotoWrap').boundingBox();
+    await ai.mouse.move(cb.x+cb.width*0.3, cb.y+cb.height*0.3); await ai.mouse.down(); await ai.mouse.move(cb.x+cb.width*0.7, cb.y+cb.height*0.7,{steps:5}); await ai.mouse.up(); await ai.waitForTimeout(300);
+    await ai.click('#modalPrev .ai-btn'); await ai.waitForTimeout(300);
+    C.check(await ai.evaluate(()=>{ const l=__shared[__shared.length-1]; return !!l && l.files[0].size>100 && /Nome:/.test(l.text) && aiWait==='modal'; }), 'ritaglio del lotto: si chiede a Claude anche da lì');
+    await ai.evaluate(()=>navigator.clipboard.writeText('Nome: Cavetto JST-PH 2 poli\nDescrizione: 10 cm, passo 2 mm\nTag: jst, ph\nCategoria: Droni / Elettronica'));
+    await ai.click('#modalPrev .ai-btn'); await ai.waitForTimeout(300);
+    C.check(await ai.evaluate(()=>document.getElementById('mDesc').value==='Cavetto JST-PH 2 poli — 10 cm, passo 2 mm' && document.getElementById('mTags').value==='jst, ph' && document.getElementById('mCatPick').dataset.v==='Droni / Elettronica'), 'e la risposta compila il pezzo ritagliato');
+    await ai.click('#mSave'); await ai.waitForTimeout(200);
+    C.check(await ai.evaluate(()=>index.some(i=>i.desc.startsWith('Cavetto JST-PH') && i.tags.join()==='jst,ph')), 'pezzo ritagliato salvato con i dati di Claude');
+    // Mac: niente "Condividi" → foto negli appunti e Claude aperto con la domanda
+    const aim = await device(b, srv.url, 'Mac', {permissions:['clipboard-read','clipboard-write']});
+    await aim.context().route('https://claude.ai/**', r=>r.fulfill({status:200, contentType:'text/html', body:'<title>finto Claude</title>'}));
+    await aim.setInputFiles('#photoInput',IMG); await aim.waitForTimeout(500);
+    await aim.click('#photoZone .ai-btn'); await aim.waitForSelector('#dlgBg.show');
+    const [pop] = await Promise.all([aim.context().waitForEvent('page'), aim.click('#dlgOk')]);
+    const pu = new URL(pop.url()); await pop.close(); await aim.bringToFront(); await aim.waitForTimeout(300);
+    C.check(pu.origin==='https://claude.ai' && pu.pathname==='/new' && /Nome:/.test(pu.searchParams.get('q')||''), 'Mac: si apre claude.ai con la domanda già scritta');
+    C.check(await aim.evaluate(async()=>{ try{ const it=await navigator.clipboard.read(); return it.some(i=>i.types.includes('image/png')); }catch(e){ return 'err '+e.message; } })===true, 'Mac: la foto è negli appunti, pronta da incollare');
+    C.check(/Incolla/.test(await aim.evaluate(()=>document.querySelector('#photoZone .ai-btn').textContent)), 'Mac: poi si aspetta la risposta');
+    C.check(ai.errs.length===0 && aim.errs.length===0 && ai.native===0 && aim.native===0, 'nessun errore JavaScript '+JSON.stringify([...ai.errs,...aim.errs]));
 
     console.log('app · 9. tutto dentro lo schermo (320 px, iPhone SE)');
     await p.setViewportSize({width:320, height:640});

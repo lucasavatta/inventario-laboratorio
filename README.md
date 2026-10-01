@@ -30,6 +30,17 @@ Web app per l'inventario del laboratorio (e non solo: armadio per il cambio di s
    Se lo stesso pezzo viene modificato su due dispositivi, vince la modifica più recente.
 7. **Backup manuale ZIP** — facoltativo, in Opzioni → Esporta archivio ZIP.
 
+## Chiedi a Claude: "che cos'è questo pezzo?"
+
+Serve l'app **Claude** installata sul telefono. Non servono chiavi né abbonamenti in più.
+
+1. Fai la foto: sopra la foto compare **✨ Cos'è?**. Toccalo.
+2. Si apre "Condividi": scegli **Claude** e invia. La domanda è già scritta (se nella chat non c'è, incollala: è già copiata).
+3. Quando Claude risponde, tieni premuta la risposta → **Copia**.
+4. Torna nell'inventario e tocca **📋 Incolla** sopra la foto: descrizione, tag e categoria si compilano da soli. Controlla e salva.
+
+Funziona anche sui pezzi ritagliati da una Foto Lotto. Sul Mac il pulsante copia la foto e apre claude.ai con la domanda: lì incolli la foto con ⌘V.
+
 ## Archivi (laboratorio, armadio, cantina…)
 
 Opzioni → Archivi → **Nuovo archivio**: si parte da un modello (Armadio, Cantina, vuoto) e si cambiano nome, icona, categorie e stati.

@@ -16,6 +16,7 @@ Dalla v5 ci sono più **archivi** separati (Laboratorio, Armadio per il cambio d
 - Iterazioni piccole e verificabili. Una modifica → test → commit → push → controllo online.
 - Niente dati inventati e niente metriche "creative". Se qualcosa non è verificabile, dillo.
 - Prima di ogni push: `cd tests && npm test` deve essere tutto verde.
+- Nella v5.2.1 `sw.js` è finito **vuoto** nel commit (causa non accertata) e l'app non si apriva più senza rete: prima del commit guarda sempre `git diff --stat`. Il test "rilascio" ora controlla che `sw.js` ci sia, abbia la stessa versione della pagina e che l'app si riapra offline.
 - A ogni rilascio **alza la versione in due punti**: `VERSION` in `sw.js` e il testo `vX.Y.Z ·` in `<div class="sub">` di `index.html` (scheda Opzioni → Informazioni). Dopo il push (1–2 minuti) verifica con:
   `curl -s https://lucasavatta.github.io/inventario-laboratorio/ | grep -o 'v[0-9.]* ·'`
 - Le correzioni devono reggere sull'iPhone reale: quando una cosa dipende da iOS, dillo esplicitamente all'utente e fagli provare il caso concreto.
@@ -47,6 +48,18 @@ Niente framework e niente dipendenze a runtime oltre JSZip (niente font esterni:
 - **Tag già usati a un tocco** (`renderTagSugg`): compaiono sotto il campo Tag solo mentre ci scrivi, ordinati per uso.
 - **Scatole è un elenco** dentro un riquadro (`.blist`, righe `.bcard` con miniatura, nome, posto, conteggi): toccando una riga si apre il contenuto. Niente altro in quella pagina.
 - **Opzioni a sezioni chiuse** (`<details class="card pad set">`), con a destra un riepilogo di una parola (`updSetSum`). Niente testi lunghi a vista: le spiegazioni stanno dentro la sezione. Nei test usa `goSet(p)`, che le apre tutte.
+
+## Chiedi a Claude (v5.3)
+
+Riconoscere un pezzo dalla foto **senza chiavi API e senza servizi a pagamento**: l'app non parla mai con Claude, passa la mano all'app Claude dell'utente.
+
+- Pulsante `.ai-btn` sopra la foto (Scatta: `data-ai="cap"`; pezzo ritagliato da un lotto: `data-ai="modal"`). Compare solo se c'è la foto e **non allunga il modulo**.
+- `aiAsk(k)`, tutto **dentro il tocco, senza `await` prima** (altrimenti iOS rifiuta la condivisione): domanda copiata negli appunti (`copyNow`) → `navigator.share({files:[foto], text:domanda})`. La domanda (`aiPrompt`) contiene il nome dell'archivio, le sue categorie e quello che l'utente ha già scritto; chiede una risposta su righe fisse `Nome / Descrizione / Tag / Categoria / Dubbio`.
+- Senza "Condividi" di file (Chrome sul Mac) o se fallisce → `aiByHand`: foto negli appunti come PNG + `https://claude.ai/new?q=<domanda>` in una nuova scheda.
+- Dopo la domanda il pulsante diventa **📋 Incolla** (`aiWait`, tenuto in `sessionStorage` perché iOS può ricaricare la pagina mentre si è su Claude). `aiPaste` legge gli appunti, `aiParse` capisce la risposta anche su una riga sola o con il grassetto, `aiApply` riempie descrizione (`Nome — Descrizione · testo dell'utente`), tag e categoria (`aiCat`, confronto elastico). Lo stesso succede incollando la risposta direttamente nel campo descrizione (evento `paste`).
+- Negli appunti c'è ancora la domanda (`AI_MARK`) o un testo qualsiasi → dialogo, mai compilazione alla cieca.
+- Per il riconoscimento si usa `curPhotoHi` (1600 px, solo in memoria); nel deposito resta la foto a 700 px.
+- **Da verificare sull'iPhone reale:** che l'app Claude compaia in "Condividi" e riceva foto **e** testo insieme (la guida di Anthropic documenta solo il testo). Se arriva solo la foto, la domanda si incolla: è già negli appunti.
 
 ## Modello dati (IndexedDB locale)
 
@@ -113,7 +126,7 @@ npx playwright install chromium     # oppure CHROMIUM_PATH=/percorso/chromium
 npm test
 ```
 
-- `app.test.js`: rilievo, Foto Lotto, segna/ritaglia, composizione, NFC (link copiato, apertura `#b=`), scatole con nome e posto, ricerca, export/import ZIP, dettatura (finto riconoscimento vocale: funzionante, bloccato, assente), bozza, archivi, temi, **niente scorrimento laterale a 320 px e campi a 16px**, nessun dialogo nativo, scheda di recupero.
+- `app.test.js`: **rilascio** (sw.js non vuoto, stessa versione di index.html, app riapribile senza rete), **Chiedi a Claude** (finto "Condividi", incolla, Mac), rilievo, Foto Lotto, segna/ritaglia, composizione, NFC (link copiato, apertura `#b=`), scatole con nome e posto, ricerca, export/import ZIP, dettatura (finto riconoscimento vocale: funzionante, bloccato, assente), bozza, archivi, temi, **niente scorrimento laterale a 320 px e campi a 16px**, nessun dialogo nativo, scheda di recupero.
 - `sync.test.js`: due dispositivi (iPhone e Mac simulati) contro un **finto GitHub** in `helpers.js`: invio, ricezione, foto scaricate quando servono, offline con coda, conflitti, archivi e nomi delle scatole, nessun commit inutile, **link d'invito** (dispositivo nuovo, dispositivo già collegato altrove, deposito vuoto, link non valido).
 - Helper per i dialoghi dell'app: `dlgText`, `dlgOk`, `dlgChoice`; `overflow(p)` elenca gli elementi più larghi dello schermo.
 - Ogni bug corretto va coperto da un controllo nei test. Usa `tap()` per i pulsanti che possono finire sotto la barra fissa.

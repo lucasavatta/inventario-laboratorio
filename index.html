@@ -120,6 +120,11 @@ html{overscroll-behavior-y:none}
 .caprow .photo-zone img{height:100%;max-height:none}
 .caprow .photo-zone .cam{font-size:26px}
 .caprow .photo-x{top:4px;right:4px;width:28px;height:28px;font-size:13px}
+/* "Chiedi a Claude": pulsantino sopra la foto (✨ Cos'è? → 📋 Incolla) */
+.ai-btn{position:absolute;left:4px;right:4px;bottom:4px;border:0;border-radius:999px;background:rgba(0,0,0,.62);color:#fff;font-size:12px;font-weight:600;line-height:1.2;padding:6px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-btn.wait{background:var(--accent);color:var(--accent-ink)}
+.modal .prev{position:relative}
+.modal .prev .ai-btn{left:auto;right:8px;bottom:8px;font-size:13px;padding:8px 14px}
 .caprow .microw{position:relative;display:block}
 .caprow textarea{height:104px;min-height:0;resize:none;padding-right:50px}
 .caprow .btn-mic{position:absolute;right:6px;bottom:6px;width:38px;height:38px;flex:none;font-size:18px;border-radius:50%;background:var(--soft)}
@@ -497,7 +502,7 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 
   <details class="card pad set">
     <summary><h3>Informazioni</h3><span class="ss" id="ssInfo"></span><span class="chev">›</span></summary>
-    <div class="sub">v5.2.1 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
+    <div class="sub">v5.3.0 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
   </details>
 </section>
 
@@ -530,7 +535,7 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 <div class="modal-bg" id="modalBg">
   <div class="modal">
     <h3 id="modalTitle">Nuovo pezzo</h3>
-    <div class="prev" id="modalPrev" hidden><img id="modalPrevImg" alt=""></div>
+    <div class="prev" id="modalPrev" hidden><img id="modalPrevImg" alt=""><button class="ai-btn" type="button" data-ai="modal"></button></div>
     <label class="f" for="mDesc">Descrizione <small>· 🎤</small></label>
     <div class="microw">
       <textarea id="mDesc" rows="2" placeholder="Es. regolatore step-down 5V"></textarea>
@@ -686,6 +691,9 @@ let deleted = {};      // tombstone: id -> ms cancellazione (servono alla sincro
 let ui = {arch:'lab', theme:'salvia', mic:'auto'};   // preferenze di QUESTO dispositivo (non sincronizzate)
 let photoCache = {};
 let curPhoto = null, curLotPhoto = null;
+let curPhotoHi = null;         // stessa foto più nitida, tenuta solo in memoria per "Chiedi a Claude"
+let aiWait = null;             // 'cap' | 'modal': domanda fatta, si aspetta la risposta da incollare
+const aiSt = {cap:{}, modal:{}};   // per non accumulare testo se incolli due volte
 let curTags = [];
 let editId = null;
 let nfcWanted = false, lotNfcWanted = false;
@@ -1101,28 +1109,175 @@ function compress(file, max, q){
   });
 }
 /* zona foto riutilizzabile (pezzo singolo e lotto) */
-function photoZone(zoneId, inputId, emptyHtml, onChange){
+function photoZone(zoneId, inputId, emptyHtml, onChange, extra=''){
   const z=$(zoneId), inp=$(inputId);
   const render=b64=>{
     if(b64){
-      z.innerHTML='<img src="'+b64+'" alt=""><button class="photo-x" type="button" aria-label="Togli foto">✕</button>';
+      z.innerHTML='<img src="'+b64+'" alt=""><button class="photo-x" type="button" aria-label="Togli foto">✕</button>'+extra;
       z.querySelector('.photo-x').onclick=ev=>{ ev.stopPropagation(); inp.value=''; onChange(null); render(null); };
+      if(extra) aiRefresh();
     } else z.innerHTML=emptyHtml;
   };
-  z.addEventListener('click', e=>{ if(!e.target.closest('.photo-x')) inp.click(); });
+  z.addEventListener('click', e=>{ if(!e.target.closest('.photo-x,.ai-btn')) inp.click(); });
   render(null);
   return render;
 }
-const showPhoto = photoZone('photoZone','photoInput','<span class="cam">📷</span><span>Foto</span>', v=>{ curPhoto=v; saveDraft(); });
+const showPhoto = photoZone('photoZone','photoInput','<span class="cam">📷</span><span>Foto</span>', v=>{ curPhoto=v; curPhotoHi=null; aiSetWait(null); saveDraft(); },
+  '<button class="ai-btn" type="button" data-ai="cap"></button>');
 const showLotPhoto = photoZone('lotZone','lotInput','<span class="cam">🗂️</span><span>Fotografa la scatola aperta<br>(pezzi separati, luce dall\'alto)</span>', v=>{ curLotPhoto=v; });
 $('photoInput').addEventListener('change', async e=>{
   const f=e.target.files[0]; if(!f)return;
-  try{ curPhoto = await compress(f,700,.62); showPhoto(curPhoto); saveDraft(); }catch(err){ toast('Foto non leggibile'); }
+  try{
+    const ph = curPhoto = await compress(f,700,.62); curPhotoHi=null; aiSetWait(null); showPhoto(curPhoto); saveDraft();
+    compress(f,1600,.82).then(v=>{ if(curPhoto===ph) curPhotoHi=v; }).catch(()=>{});
+  }catch(err){ toast('Foto non leggibile'); }
 });
 $('lotInput').addEventListener('change', async e=>{
   const f=e.target.files[0]; if(!f)return;
   try{ curLotPhoto = await compress(f,1100,.68); showLotPhoto(curLotPhoto); }catch(err){ toast('Foto non leggibile'); }
 });
+
+/* ================= Chiedi a Claude =================
+   Nessuna chiave e nessun servizio a pagamento: la foto e la domanda già scritta passano all'app
+   Claude con il foglio "Condividi" del telefono (sul Mac: foto negli appunti + claude.ai con la
+   domanda). La risposta torna qui con copia e incolla: 📋 Incolla, oppure incollandola nella
+   descrizione. L'app non parla mai direttamente con Claude. */
+const AI_URL = 'https://claude.ai/new?q=';
+const AI_MARK = 'Rispondi SOLO con queste righe';
+try{ aiWait = sessionStorage.getItem('aiWait')==='cap' ? 'cap' : null; }catch(e){}
+function aiSetWait(k){ aiWait=k||null; try{ if(aiWait) sessionStorage.setItem('aiWait',aiWait); else sessionStorage.removeItem('aiWait'); }catch(e){} aiRefresh(); }
+function aiRefresh(){ document.querySelectorAll('.ai-btn').forEach(b=>{ const w=aiWait===b.dataset.ai; b.textContent=w?'📋 Incolla':'✨ Cos\'è?'; b.classList.toggle('wait',w);
+  b.setAttribute('aria-label', w?'Incolla la risposta di Claude':'Chiedi a Claude che cos\'è'); }); }
+function modalArch(){ const l=lotById(openLotId); return (l&&getArchs().find(x=>x.id===archOf(l)))||arch(); }
+const AI_T = {
+  cap:   { photo:()=>curPhotoHi||curPhoto,                    field:()=>$('desc'),  arch:()=>arch(),
+           tags:t=>t.forEach(addTag),                          cat:c=>catPick($('catPick'), c) },
+  modal: { photo:()=>pendingPiece&&pendingPiece.cropB64,       field:()=>$('mDesc'), arch:modalArch,
+           tags:t=>{ const cur=$('mTags').value.split(',').map(x=>x.trim().toLowerCase()).filter(Boolean); t.forEach(x=>{ if(!cur.includes(x)) cur.push(x); }); $('mTags').value=cur.join(', '); },
+           cat:c=>catPick($('mCatPick'), c, modalArch()) },
+};
+function aiPrompt(a, known){
+  return [
+    'Sto facendo l\'inventario di «'+a.name+'». Guarda la foto e dimmi che cos\'è.',
+    known ? 'Quello che so già: '+known : '',
+    AI_MARK+', in italiano, senza altro testo:',
+    'Nome: nome breve e preciso (tipo, sigla, modello o misura, se si leggono)',
+    'Descrizione: una riga con le caratteristiche utili per ritrovarlo e riusarlo',
+    'Tag: da 3 a 5 parole chiave minuscole separate da virgola',
+    'Categoria: una tra: '+a.cats.join('; '),
+    'Dubbio: solo se non sei sicuro, che cosa devo misurare o fotografare meglio (per esempio una sigla, il passo o il numero di contatti)',
+  ].filter(Boolean).join('\n');
+}
+/* legge la risposta anche se arriva su una riga sola o con il grassetto */
+function aiParse(txt){
+  const t=String(txt||''), re=/(?:^|[\s>•\-*#])\**(Nome|Descrizione|Tags?|Categoria|Dubbio)\**\s*:\**/gi, hits=[]; let m;
+  while((m=re.exec(t))) hits.push({k:m[1].toLowerCase().replace(/^tags$/,'tag'), end:re.lastIndex, start:m.index});
+  const out={n:0};
+  hits.forEach((h,i)=>{ const v=t.slice(h.end, i+1<hits.length?hits[i+1].start:t.length).replace(/[*`]/g,'').replace(/\s+/g,' ').trim().replace(/^[-–—:]\s*/,'');
+    if(v && out[h.k]===undefined){ out[h.k]=v; out.n++; } });
+  if(!out.nome && !out.descrizione) return null;
+  const clean=x=>(x||'').replace(/[.;]+$/,'').trim();
+  return { nome:clean(out.nome), descr:clean(out.descrizione), cat:clean(out.categoria), dubbio:out.dubbio||'', n:out.n,
+           tags:(out.tag||'').split(/[,;]/).map(x=>x.replace(/[#.]/g,'').trim().toLowerCase()).filter(x=>x && x.length<=30).slice(0,6) };
+}
+function aiCat(name, a){
+  const norm=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const n=norm(name); if(!n) return null;
+  return a.cats.find(c=>norm(c)===n) || a.cats.find(c=>norm(c).includes(n) || n.includes(norm(c))) || null;
+}
+function aiApply(k, r){
+  const T=AI_T[k], f=T.field(), st=aiSt[k], curTxt=f.value.trim();
+  const mine = (st.applied!==undefined && curTxt===st.applied) ? st.mine : curTxt;      // quello che avevi scritto tu
+  let txt=[r.nome, r.descr].filter(Boolean).join(' — ');
+  if(mine && !txt.toLowerCase().includes(mine.toLowerCase())) txt+=' · '+mine;
+  f.value=txt; st.mine=mine; st.applied=txt;
+  if(r.tags.length) T.tags(r.tags);
+  const c=aiCat(r.cat, T.arch()); if(c) T.cat(c);
+  aiSetWait(null); saveDraft();
+  if(r.dubbio) fieldHint(f, 'Claude ha un dubbio: '+r.dubbio, 25000); else { const h=$(f.id+'Hint'); if(h) h.classList.remove('show'); }
+  toast('Compilato ✓ controlla e correggi');
+}
+function b64File(b64, name){
+  const i=b64.indexOf(','), mime=(b64.slice(0,i).match(/data:([^;]+)/)||[])[1]||'image/jpeg';
+  const bin=atob(b64.slice(i+1)), u=new Uint8Array(bin.length); for(let j=0;j<bin.length;j++) u[j]=bin.charCodeAt(j);
+  return new File([u], name, {type:mime});
+}
+const toPng = b64 => new Promise((res,rej)=>{ const img=new Image();
+  img.onload=()=>{ const c=document.createElement('canvas'); c.width=img.naturalWidth; c.height=img.naturalHeight; c.getContext('2d').drawImage(img,0,0); c.toBlob(b=>b?res(b):rej(new Error('png')),'image/png'); };
+  img.onerror=()=>rej(new Error('immagine')); img.src=b64; });
+function copyNow(text){          // dentro il tocco, senza aspettare: subito dopo si apre "Condividi"
+  try{ if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).catch(()=>{}); return; } }catch(e){}
+  try{ const ta=document.createElement('textarea'); ta.value=text; ta.readOnly=true; ta.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';
+       document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,text.length); document.execCommand('copy'); ta.remove(); }catch(e){}
+}
+async function aiAsk(k){
+  const T=AI_T[k], b64=T.photo(); if(!b64){ toast('Prima fai la foto'); return; }
+  endDictation();
+  const f=T.field(), st=aiSt[k], curTxt=f.value.trim();
+  const prompt=aiPrompt(T.arch(), (st.applied!==undefined && curTxt===st.applied) ? st.mine : curTxt);
+  let file=null; try{ file=b64File(b64,'pezzo.jpg'); }catch(e){}
+  let can=false; try{ can=!!(file && navigator.share && navigator.canShare && navigator.canShare({files:[file]})); }catch(e){}
+  if(!can) return aiByHand(k, b64, prompt);
+  copyNow(prompt);
+  try{ await navigator.share({files:[file], text:prompt}); }
+  catch(e){ if(e && e.name==='AbortError') return; return aiByHand(k, b64, prompt); }
+  aiSetWait(k);
+  fieldHint(f, 'Quando Claude risponde: copia la risposta, torna qui e tocca 📋 Incolla sulla foto. Se nella chat manca la domanda, incollala: è già copiata.', 30000);
+}
+/* senza "Condividi" (Mac, o se la condivisione non va): foto negli appunti e Claude aperto con la domanda */
+async function aiByHand(k, b64, prompt){
+  const url=AI_URL+encodeURIComponent(prompt);
+  const png=await toPng(b64).catch(()=>null);
+  const go=await dialog({title:'✨ Chiedi a Claude', ok:'Copia la foto e apri Claude',
+    html:'Si apre Claude con la <b>domanda già scritta</b>. Lì <b>incolla la foto</b> ('+(IOS?'tieni premuto → Incolla':'⌘V')+') e invia.<br>Poi copia la risposta, torna qui e tocca <b>📋 Incolla</b>.'});
+  if(!go) return;
+  let copied=false;
+  try{ if(png){ await navigator.clipboard.write([new ClipboardItem({'image/png':png})]); copied=true; } }catch(e){}
+  let w=null; try{ w=window.open(url,'_blank'); if(w) w.opener=null; }catch(e){}
+  aiSetWait(k);
+  if(!w){
+    const d=dialog({title:'Apri Claude', ok:false, cancel:'Chiudi', html:(copied?'Foto copiata ✓ ':'')+'Tocca qui sotto per aprire Claude con la domanda già scritta.<br><a class="btn main pri" style="display:block;text-align:center;text-decoration:none" href="'+esc(url)+'" target="_blank" rel="noopener">Apri Claude</a>'});
+    const a=$('dlgText').querySelector('a'); if(a) a.addEventListener('click', ()=>{ if(dlgClose) dlgClose(true); });
+    await d;
+  }
+  if(!copied) toast('Non sono riuscito a copiare la foto: in Claude allegala a mano');
+}
+async function aiPaste(k){
+  let txt=null;
+  try{ txt=await navigator.clipboard.readText(); }catch(e){}
+  if(txt===null || !txt.trim()){
+    txt=await dialog({title:'📋 Incolla la risposta', html:'Tieni premuto nel campo qui sotto e scegli <b>Incolla</b>.', input:{placeholder:'Nome: …'}, ok:'Usa'});
+    if(!txt) return;
+  }
+  aiTake(k, txt);
+}
+async function aiTake(k, txt){
+  if(txt.includes(AI_MARK)){
+    const v=await dialog({title:'Manca la risposta', ok:'Ho capito', cancel:'Chiudi', choices:[{v:'again',label:'✨ Chiedi di nuovo'}],
+      html:'Negli appunti c\'è ancora la domanda. In Claude tieni premuta la <b>risposta</b> → <b>Copia</b>, poi torna qui e tocca 📋 Incolla.'});
+    if(v==='again'){ aiSetWait(null); toast('Tocca ✨ Cos\'è? sulla foto'); }
+    return;
+  }
+  const r=aiParse(txt);
+  if(r) return aiApply(k, r);
+  const short=txt.replace(/\s+/g,' ').trim();
+  const v=await dialog({title:'Non riconosco la risposta', ok:'Usa come descrizione', choices:[{v:'again',label:'✨ Chiedi di nuovo'}],
+    html:'Negli appunti c\'è questo testo:<br><i>'+esc(short.slice(0,160))+(short.length>160?'…':'')+'</i>'});
+  if(v==='again'){ aiSetWait(null); toast('Tocca ✨ Cos\'è? sulla foto'); }
+  else if(v===true) aiApply(k, {nome:short.slice(0,300), descr:'', cat:'', dubbio:'', tags:[]});
+}
+document.addEventListener('click', e=>{
+  const b=e.target.closest('.ai-btn'); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const k=b.dataset.ai; if(aiWait===k) aiPaste(k); else aiAsk(k);
+}, true);
+/* risposta incollata direttamente nella descrizione: riempie da sola anche tag e categoria */
+[['desc','cap'],['mDesc','modal']].forEach(([id,k])=> $(id).addEventListener('paste', e=>{
+  const t=(e.clipboardData && e.clipboardData.getData('text'))||''; if(!t || t.includes(AI_MARK)) return;
+  const r=aiParse(t); if(r && r.n>=2){ e.preventDefault(); aiApply(k, r); }
+}));
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && aiWait) toast('Copiata la risposta? Tocca 📋 Incolla'); });
+aiRefresh();
 
 /* ================= segmenti ================= */
 function setSeg(lot){ $('segLot').classList.toggle('on',lot); $('segSingle').classList.toggle('on',!lot); $('capLot').hidden=!lot; $('capSingle').hidden=lot; }
@@ -1138,9 +1293,9 @@ const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform=
 // Chrome, Firefox, Edge su iPhone: il riconoscimento vocale della pagina non funziona (si blocca), vale solo quello della tastiera
 const IOS_NO_SR = IOS && /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(navigator.userAgent);
 let dict=null;
-function fieldHint(target, msg){
+function fieldHint(target, msg, ms=7000){
   const h=$(target.id+'Hint'); if(!h){ toast(msg); return; }
-  h.textContent=msg; h.classList.add('show'); clearTimeout(h._t); h._t=setTimeout(()=>h.classList.remove('show'), 7000);
+  h.textContent=msg; h.classList.add('show'); clearTimeout(h._t); h._t=setTimeout(()=>h.classList.remove('show'), ms);
 }
 function keyboardDictation(target, why){
   target.focus(); const n=target.value.length; try{ target.setSelectionRange(n,n); }catch(e){}
@@ -1346,7 +1501,7 @@ async function restoreDraft(){
 }
 function setEditMode(on){ $('saveBtn').textContent=on?'Aggiorna pezzo':'Salva e passa al prossimo'; $('cancelEdit').hidden=!on; }
 function resetForm(){
-  editId=null; curPhoto=null; curTags=[]; showPhoto(null);
+  editId=null; curPhoto=null; curPhotoHi=null; curTags=[]; showPhoto(null); aiSetWait(null); aiSt.cap={};
   store.delete('draft').catch(()=>{});
   $('desc').value=''; $('qty').value=1; renderTags();
   nfcWanted=false; $('nfcOpt').classList.remove('on');
@@ -1609,7 +1764,7 @@ wrap.addEventListener('pointercancel', endCrop);
 function openModal(previewB64){
   $('modalTitle').textContent = pendingPiece.type==='marker'?'Pezzo segnato sulla foto':'Pezzo ritagliato';
   $('modalPrev').hidden=!previewB64; if(previewB64) $('modalPrevImg').src=previewB64;
-  $('mDesc').value=''; $('mTags').value=''; $('mQty').value=1;
+  $('mDesc').value=''; $('mTags').value=''; $('mQty').value=1; aiSt.modal={}; if(aiWait==='modal') aiSetWait(null);
   const l=lotById(openLotId), a=(l&&getArchs().find(x=>x.id===archOf(l)))||arch();
   catPick($('mCatPick'), $('mCatPick').dataset.v, a); statePick($('mState'), $('mState').value, a);
   if(pendingDraftM && pendingDraftM.lotId===openLotId){ $('mDesc').value=pendingDraftM.text; $('mTags').value=pendingDraftM.tags; pendingDraftM=null; toast('Testo recuperato ✓'); }
@@ -1725,7 +1880,7 @@ async function editItem(id){
   $('desc').value=i.desc; $('qty').value=i.qty;
   catPick($('catPick'), i.cat); statePick($('stateSel'), i.state);
   renderTags();
-  curPhoto=i.hasPhoto?await getPhoto(id):null;
+  curPhoto=i.hasPhoto?await getPhoto(id):null; curPhotoHi=null; aiSt.cap={}; aiSetWait(null);
   showPhoto(curPhoto);
   setEditMode(true);
   setSeg(false);
