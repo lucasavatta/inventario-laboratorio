@@ -83,6 +83,14 @@ Repo dati privato, Git Data API di GitHub, chiave fine-grained con *Contents: re
 
 Quando parte: dopo ogni salvataggio (2,5 s), all'apertura, al ritorno sulla pagina, ogni 60 s se visibile, al ritorno della rete. Le foto mancanti si scaricano solo quando servono (`getPhoto`).
 
+### Link d'invito (per chi non deve vedere GitHub)
+
+Opzioni → Sincronizzazione → **Invita un'altra persona**: dato un deposito privato e una chiave valida solo per quello, l'app crea `…/#join=<base64url di {r:repo, t:chiave, b:branch}>`. Chi apre il link (`joinInvite`, da `handleHash`) si collega da solo; il frammento viene tolto subito dalla barra dell'indirizzo e non arriva a nessun server.
+- Il link **contiene la chiave**: va mandato in privato; si revoca da GitHub.
+- Due inventari non si mescolano mai: se il dispositivo è già collegato a un altro deposito, dopo conferma i dati locali vengono tolti (`wipeLocal`) e solo se è tutto sincronizzato.
+- Deposito nuovo e vuoto → messaggio di benvenuto e scelta dell'archivio (Armadio, Cantina…).
+- Il collegamento comune è `connectSync(repo, token)`; `checkRepo` verifica chiave e permesso di scrittura.
+
 Layout del repo dati: `inventario.json`, `inventario.md` (per scatola, pensato per l'AI), `inventario.csv` (separatore `;`), `LEGGIMI.md`, `foto/pezzi/<id>.jpg`, `foto/lotti/<id>.jpg`.
 
 ## Vincoli di piattaforma (già scoperti a caro prezzo)
@@ -105,7 +113,7 @@ npm test
 ```
 
 - `app.test.js`: rilievo, Foto Lotto, segna/ritaglia, composizione, NFC (link copiato, apertura `#b=`), scatole con nome e posto, ricerca, export/import ZIP, dettatura (finto riconoscimento vocale: funzionante, bloccato, assente), bozza, archivi, temi, **niente scorrimento laterale a 320 px e campi a 16px**, nessun dialogo nativo, scheda di recupero.
-- `sync.test.js`: due dispositivi (iPhone e Mac simulati) contro un **finto GitHub** in `helpers.js`: invio, ricezione, foto scaricate quando servono, offline con coda, conflitti, archivi e nomi delle scatole, nessun commit inutile.
+- `sync.test.js`: due dispositivi (iPhone e Mac simulati) contro un **finto GitHub** in `helpers.js`: invio, ricezione, foto scaricate quando servono, offline con coda, conflitti, archivi e nomi delle scatole, nessun commit inutile, **link d'invito** (dispositivo nuovo, dispositivo già collegato altrove, deposito vuoto, link non valido).
 - Helper per i dialoghi dell'app: `dlgText`, `dlgOk`, `dlgChoice`; `overflow(p)` elenca gli elementi più larghi dello schermo.
 - Ogni bug corretto va coperto da un controllo nei test. Usa `tap()` per i pulsanti che possono finire sotto la barra fissa.
 

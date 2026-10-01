@@ -470,6 +470,7 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
       </div>
       <div class="btns"><button class="btn" id="syncCopyKey" type="button">Copia la chiave (per un altro browser)</button></div>
     </div>
+    <div class="btns"><button class="btn" id="invOpen" type="button">✉️ Invita un'altra persona…</button></div>
   </details>
 
   <details class="card pad set">
@@ -492,7 +493,7 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 
   <details class="card pad set">
     <summary><h3>Informazioni</h3><span class="ss" id="ssInfo"></span><span class="chev">›</span></summary>
-    <div class="sub">v5.1.0 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
+    <div class="sub">v5.2.0 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
   </details>
 </section>
 
@@ -565,6 +566,28 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 </div>
 
 <!-- ARCHIVIO ZIP PRONTO -->
+<div class="modal-bg" id="invBg">
+  <div class="modal">
+    <h3>Invita un'altra persona</h3>
+    <div id="invForm">
+      <div class="hint">Prepari un <b>link</b>: chi lo apre (sul telefono e sul computer) si collega da solo al suo inventario, senza chiavi né GitHub. Serve un deposito privato solo per lei/lui.</div>
+      <label class="f" for="invRepo">Deposito dei suoi dati</label>
+      <input type="text" id="invRepo" value="lucasavatta/inventario-armadio" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label class="f" for="invToken">Chiave d'accesso per quel deposito</label>
+      <input type="password" id="invToken" placeholder="github_pat_…" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
+      <div class="hint" style="margin-top:6px"><a id="invTokLink" target="_blank" rel="noopener">Crea la chiave (modulo già compilato)</a>: <b>Only select repositories</b> → quel deposito → <b>Generate token</b> → copia.</div>
+      <button class="btn main pri" id="invMake" type="button">Crea link d'invito</button>
+    </div>
+    <div id="invDone" hidden>
+      <div class="hint">Link pronto. <b>Mandalo solo a lei/lui</b>: chi ha questo link può leggere e modificare quell'inventario. Va aperto una volta su ogni dispositivo.</div>
+      <div class="nfc-url" id="invLink"></div>
+      <button class="btn main pri" id="invShare" type="button">Invia (Mail, Messaggi…)</button>
+      <button class="btn main" id="invCopy" type="button" style="margin-top:8px">Copia link</button>
+    </div>
+    <button class="btn main" id="invClose" type="button" style="margin-top:8px">Chiudi</button>
+  </div>
+</div>
+
 <div class="modal-bg" id="zipBg">
   <div class="modal">
     <h3>Archivio pronto</h3>
@@ -1230,8 +1253,9 @@ const nfcWriteBox = b => { const bi=boxInfo(b); nfcSheet('Tag NFC scatola '+b, '
 /* apertura da tag / link: #b=B03 (eventualmente &a=archivio) oppure #p=ID */
 function handleHash(){
   const h=location.hash.slice(1); if(!h) return;
-  const p=new URLSearchParams(h), b=p.get('b'), id=p.get('p'), a=p.get('a');
-  history.replaceState(null,'',location.pathname+location.search);
+  const p=new URLSearchParams(h), b=p.get('b'), id=p.get('p'), a=p.get('a'), join=p.get('join');
+  history.replaceState(null,'',location.pathname+location.search);   // via dalla barra dell'indirizzo (anche la chiave dell'invito)
+  if(join) return joinInvite(join);
   if(b){
     const code=boxCode(b);
     const aid = a && getArchs().some(x=>x.id===a) ? a
@@ -1920,35 +1944,118 @@ function renderSyncStatus(){
     +((meta.dirtyPhotos||[]).length?'<br>Foto da inviare: '+meta.dirtyPhotos.length:'');
 }
 $('syncRepo').addEventListener('input', ()=>{ $('tokLink').href=tokenUrl($('syncRepo').value); });
-$('syncConnect').onclick=async ()=>{
-  const repo=$('syncRepo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/$/,'');
-  const token=$('syncToken').value.trim();
-  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){ toast('Repository nel formato utente/nome'); return; }
-  if(!token){ toast('Incolla la chiave d\'accesso'); return; }
-  $('syncConnect').disabled=true; $('syncConnect').textContent='Verifico…';
-  const prev=cfg; cfg={repo, token, branch:'main'};
+/* collega questo dispositivo a un repository dati: verifica chiave e permessi, poi sincronizza */
+async function checkRepo(repo, token){
+  const info=await fetch('https://api.github.com/repos/'+repo,{headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'},cache:'no-store'});
+  if(info.status===401) throw new Error('Chiave non valida');
+  if(info.status===404) throw new Error('Repository non trovato o non incluso nella chiave');
+  if(!info.ok) throw new Error('GitHub ha risposto '+info.status);
+  const j=await info.json();
+  if(j.permissions && !j.permissions.push) throw new Error('La chiave non ha il permesso di scrittura (Contents: Read and write)');
+  return j;
+}
+async function connectSync(repo, token){
+  const prev=cfg;
   try{
-    const info=await fetch('https://api.github.com/repos/'+repo,{headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'},cache:'no-store'});
-    if(info.status===401) throw new Error('Chiave non valida');
-    if(info.status===404) throw new Error('Repository non trovato o non incluso nella chiave');
-    if(!info.ok) throw new Error('GitHub ha risposto '+info.status);
-    const j=await info.json();
+    const j=await checkRepo(repo, token);
     if(!j.private && !await confirmDlg('Repository pubblico!', esc(repo)+' è <b>pubblico</b>: i dati sarebbero visibili a tutti. Continuare?', 'Continua')) throw new Error('Annullato');
-    if(j.permissions && !j.permissions.push) throw new Error('La chiave non ha il permesso di scrittura (Contents: Read and write)');
-    cfg.branch=j.default_branch||'main';
+    cfg={repo, token, branch:j.default_branch||'main'};
     try{ await gh('/git/ref/heads/'+encodeURIComponent(cfg.branch)); }
     catch(e){ if(e.status===404||e.status===409) throw new Error('Il repository è vuoto: crealo con l\'opzione "Add README"'); throw e; }
     await store.set('sync-cfg', cfg);
     // al primo collegamento invio tutte le foto presenti su questo dispositivo
     const ph=(await store.keys()).filter(k=>String(k).startsWith('photo-')).map(k=>String(k).slice(6));
     meta.dirtyPhotos=[...new Set([...(meta.dirtyPhotos||[]), ...ph])]; meta.remoteHead=null; await saveMeta();
-    $('syncToken').value='';
-    renderSyncCard(); toast('Collegato ✓ sincronizzo…');
+    renderSyncCard();
     document.querySelectorAll('.recover').forEach(e=>e.remove());
-    sync();
-  }catch(e){ cfg=prev; toast(e.message||'Errore di collegamento'); }
+  }catch(e){ cfg=prev; throw e; }
+}
+const cleanRepo = v => v.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/$/,'');
+$('syncConnect').onclick=async ()=>{
+  const repo=cleanRepo($('syncRepo').value), token=$('syncToken').value.trim();
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){ toast('Repository nel formato utente/nome'); return; }
+  if(!token){ toast('Incolla la chiave d\'accesso'); return; }
+  $('syncConnect').disabled=true; $('syncConnect').textContent='Verifico…';
+  try{ await connectSync(repo, token); $('syncToken').value=''; toast('Collegato ✓ sincronizzo…'); sync(); }
+  catch(e){ toast(e.message||'Errore di collegamento'); }
   finally{ $('syncConnect').disabled=false; $('syncConnect').textContent='Collega'; }
 };
+
+/* ================= link d'invito =================
+   Il link porta, nella parte dopo # (che non viene mai inviata a nessun server), il deposito
+   e la chiave: chi lo apre si collega da solo. Appena letto, viene tolto dalla barra dell'indirizzo. */
+const b64u = { enc:o=>btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''),
+               dec:c=>JSON.parse(decodeURIComponent(escape(atob(c.replace(/-/g,'+').replace(/_/g,'/'))))) };
+function invTokUrl(repo){
+  const [owner,name]=(repo||'').split('/');
+  return 'https://github.com/settings/personal-access-tokens/new?name='+encodeURIComponent(('Invito '+(name||'inventario')).slice(0,40))
+    +'&description='+encodeURIComponent('Link d\'invito app Inventario: accesso al solo deposito '+(repo||''))
+    +(owner?'&target_name='+encodeURIComponent(owner):'')+'&expires_in=none&contents=write';
+}
+let invUrl='';
+$('invOpen').onclick=()=>{ $('invForm').hidden=false; $('invDone').hidden=true; $('invToken').value=''; $('invTokLink').href=invTokUrl($('invRepo').value); show('invBg'); };
+$('invRepo').addEventListener('input', ()=>{ $('invTokLink').href=invTokUrl($('invRepo').value); });
+$('invClose').onclick=()=>{ show('invBg',false); $('invToken').value=''; invUrl=''; $('invLink').textContent=''; };
+$('invMake').onclick=async ()=>{
+  const repo=cleanRepo($('invRepo').value), token=$('invToken').value.trim();
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){ toast('Deposito nel formato utente/nome'); return; }
+  if(!token){ toast('Incolla la chiave di quel deposito'); return; }
+  if(cfg && cfg.repo===repo && !await confirmDlg('È il TUO deposito', 'Stai creando un invito per <b>'+esc(repo)+'</b>, quello che usi tu: chi apre il link vedrà e potrà modificare tutto il tuo inventario. Continuare?', 'Continua')) return;
+  $('invMake').disabled=true; $('invMake').textContent='Verifico…';
+  try{
+    const j=await checkRepo(repo, token);
+    if(!j.private) throw new Error('Quel deposito è pubblico: serve un deposito privato');
+    invUrl=appBase()+'#join='+b64u.enc({r:repo, t:token, b:j.default_branch||'main'});
+    $('invLink').textContent=invUrl.slice(0,70)+'…';
+    $('invForm').hidden=true; $('invDone').hidden=false; $('invToken').value='';
+  }catch(e){ toast(e.message||'Non riesco a verificare la chiave'); }
+  finally{ $('invMake').disabled=false; $('invMake').textContent='Crea link d\'invito'; }
+};
+const INV_TEXT='Ti ho preparato l\'app Inventario. Apri questo link sul telefono (con Safari) e poi anche sul computer: si collega da sola. Non girare il link ad altri.';
+$('invShare').onclick=async ()=>{
+  try{ if(navigator.share){ await navigator.share({title:'Inventario', text:INV_TEXT, url:invUrl}); return; } }catch(e){ if(e.name==='AbortError') return; }
+  location.href='mailto:?subject='+encodeURIComponent('La tua app Inventario')+'&body='+encodeURIComponent(INV_TEXT+'\n\n'+invUrl);
+};
+$('invCopy').onclick=async ()=>{
+  try{ await navigator.clipboard.writeText(invUrl); toast('Link d\'invito copiato'); }
+  catch(e){ dialog({title:'Copia il link', html:'Tieni premuto sul testo → Seleziona tutto → Copia.', input:{value:invUrl}, ok:false, cancel:'Chiudi'}); }
+};
+/* toglie dal dispositivo i dati locali (restano sul loro repository) */
+async function wipeLocal(){
+  for(const k of await store.keys()) if(String(k).startsWith('photo-')) await store.delete(k);
+  photoCache={}; setData({}); takeSnap(); await persistIndex();
+  try{ await store.delete('draft'); }catch(e){}
+  meta={...meta, changeSeq:0, pushedSeq:0, remoteHead:null, dirtyPhotos:[], lastSync:0, lastChange:0}; await saveMeta();
+  ui.arch='lab'; await saveUI();
+  compSel.clear(); filters={box:null,cat:null}; showOnly=null;
+}
+async function joinInvite(code){
+  let inv; try{ inv=b64u.dec(code); }catch(e){ inv=null; }
+  if(!inv || !/^[\w.-]+\/[\w.-]+$/.test(inv.r||'') || !inv.t){ toast('Link d\'invito non valido'); return; }
+  if(cfg && cfg.repo===inv.r){ toast('Questo dispositivo è già collegato ✓'); sync(); return; }
+  const has = index.length || lots.length || archs.length || boxMeta.length;
+  if(cfg){
+    // già collegato a un altro inventario: non si mescolano mai due inventari
+    if(!await confirmDlg('Passare a un altro inventario?', 'Questo dispositivo è collegato a <b>'+esc(cfg.repo)+'</b>. Aprendo l\'invito passa a <b>'+esc(inv.r)+'</b>: i dati di adesso vengono tolti da questo dispositivo (restano al sicuro su GitHub).<br><br>Se è il tuo inventario e vuoi solo provare il link, annulla e aprilo in una <b>finestra privata</b>.', 'Passa all\'altro')) return;
+    await sync();
+    if(localDirty()){ toast('Prima devo finire di sincronizzare: riprova tra poco'); return; }
+  } else if(has){
+    if(!await confirmDlg('Unire i dati?', 'Su questo dispositivo ci sono già '+pl(index.length,'voce','voci')+'. Collegandoti verranno <b>aggiunte</b> all\'inventario condiviso <b>'+esc(inv.r)+'</b>.', 'Unisci e collega')) return;
+  }
+  toast('Mi collego…');
+  try{
+    await checkRepo(inv.r, inv.t);               // prima verifico, poi tocco i dati locali
+    if(cfg){ cfg=null; await store.delete('sync-cfg'); await wipeLocal(); refreshAll(); renderHeader(); }
+    await connectSync(inv.r, inv.t);
+    await sync();
+    refreshAll(); renderHeader(); renderSettings(); updSetSum();
+    if(!index.length && !lots.length && !archs.length){
+      // inventario nuovo: chiedo subito che cosa si vuole inventariare
+      await dialog({title:'Collegato ✓', html:'Questo dispositivo ora salva da solo e resta allineato con gli altri.<br>Scegli che cosa vuoi inventariare.', ok:'Avanti', cancel:'Dopo'}) && $('archAdd').click();
+    } else toast('Collegato ✓ '+pl(index.length,'voce','voci'));
+  }catch(e){ toast(e.message||'Collegamento non riuscito: chiedi un nuovo link'); }
+}
+
 $('syncNow').onclick=()=>sync();
 $('syncCopyKey').onclick=async ()=>{
   if(!cfg) return;

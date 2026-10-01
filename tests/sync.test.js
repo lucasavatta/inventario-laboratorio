@@ -1,5 +1,5 @@
 // Sincronizzazione iPhone ↔ Mac con finto GitHub: invio, ricezione, offline, conflitti, niente commit inutili
-const { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, goSet } = require('./helpers');
+const { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, goSet, dlgOk, dlgChoice } = require('./helpers');
 
 module.exports = async function(){
   const srv = await startServer(); const b = await launch(); const G = mockGitHub(); const C = checker();
@@ -65,6 +65,37 @@ module.exports = async function(){
     C.check(/Archivio: Armadio[\s\S]*Scatola A1/.test(G.blobs[(()=>{ const c=G.commits[G.ref]; return G.trees[c.tree]['inventario.md']; })()].toString()), 'inventario.md diviso per archivio');
     const p2=G.patches; await mac.evaluate(()=>sync()); await waitSync(mac); await ph.evaluate(()=>sync()); await waitSync(ph);
     C.check(G.patches===p2, 'nessun commit inutile anche con archivi e scatole');
+    console.log('sync · 7. link d\'invito: chi lo apre si collega da solo');
+    await goSet(ph); await tap(ph,'#invOpen'); await ph.fill('#invRepo','luca/dati'); await ph.fill('#invToken','tok'); await ph.click('#invMake');
+    await dlgOk(ph);                                   // avviso: è il tuo stesso deposito
+    await ph.waitForSelector('#invDone:not([hidden])');
+    const link = await ph.evaluate(()=>invUrl);
+    C.check(/#join=[\w-]+$/.test(link) && !link.includes('tok'), 'link creato dopo la verifica della chiave');
+    await ph.click('#invClose');
+    const nRemote = G.remoteJson().items.length;
+    const guest = await device(b, srv.url, 'iPhone', {github:G});
+    await guest.goto(link); await guest.waitForTimeout(2500);
+    C.check(await guest.evaluate(n=>!!cfg && cfg.repo==='luca/dati' && index.length===n, nRemote), 'dispositivo nuovo: collegato e con tutti i dati, senza inserire chiavi');
+    C.check(await guest.evaluate(()=>location.hash==='' ), 'la chiave sparisce dalla barra dell\'indirizzo');
+    await guest.reload(); await guest.waitForTimeout(800);
+    C.check(await guest.evaluate(n=>!!cfg && index.length===n, nRemote), 'resta collegato dopo la riapertura');
+    // dispositivo già collegato a un ALTRO inventario: non si mescolano, i dati locali vengono tolti
+    const other = await device(b, srv.url, 'iPhone', {github:G});
+    await other.evaluate(async()=>{ index.unshift({id:'solo-mio',box:null,cat:'Vario',desc:'Cosa di un altro inventario',tags:[],qty:1,state:'Nuovo',hasPhoto:false,nfc:false,lotId:null,light:false,marker:null,ts:Date.now()});
+      await saveIndex(); cfg={repo:'luca/altro',token:'tok',branch:'main'}; await store.set('sync-cfg',cfg); meta.pushedSeq=meta.changeSeq; await saveMeta(); });
+    await other.goto(link); await dlgOk(other); await other.waitForTimeout(2500);
+    C.check(await other.evaluate(n=>cfg.repo==='luca/dati' && index.length===n && !index.some(i=>i.id==='solo-mio'), nRemote), 'passando a un altro inventario i due non si mescolano');
+    C.check(!G.remoteJson().items.some(i=>i.id==='solo-mio'), 'e nel deposito non finisce niente dell\'altro');
+    // deposito nuovo e vuoto: benvenuto e scelta di cosa inventariare
+    const G2 = mockGitHub();
+    const fresh = await device(b, srv.url, 'iPhone', {github:G2});
+    await fresh.goto(link); await fresh.waitForTimeout(1800);
+    C.check(await fresh.locator('#dlgBg.show').count()===1 && /Collegato/.test(await fresh.textContent('#dlgTitle')), 'deposito vuoto: messaggio di benvenuto');
+    await dlgOk(fresh); await dlgChoice(fresh,'Armadio'); await fresh.click('#archEdSave'); await fresh.waitForTimeout(400);
+    C.check(await fresh.evaluate(()=>arch().name==='Armadio'), 'e si parte subito dall\'archivio scelto (Armadio)');
+    await guest.goto(srv.url+'#join=robaccia'); await guest.waitForTimeout(500);
+    C.check(await guest.evaluate(n=>cfg.repo==='luca/dati' && index.length===n, nRemote), 'un link non valido non cambia niente');
+    C.check(guest.errs.length===0 && other.errs.length===0 && fresh.errs.length===0, 'nessun errore JavaScript negli inviti '+JSON.stringify([...guest.errs,...other.errs,...fresh.errs]));
     C.check(ph.errs.length===0 && mac.errs.length===0, 'nessun errore JavaScript '+JSON.stringify([...ph.errs,...mac.errs]));
   } finally { await b.close(); srv.close(); }
   return C.failed;
