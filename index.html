@@ -195,7 +195,7 @@ header{padding-top:calc(14px + env(safe-area-inset-top))}
 
 <header>
   <h1><span class="dot"></span>Inventario Officina</h1>
-  <div class="sub">v4.2 · Rilievo · Lotti · Composizione · Ricerca</div>
+  <div class="sub">v4.2.1 · Rilievo · Lotti · Composizione · Ricerca</div>
   <span class="bkp" id="bkpBadge" style="display:none"></span>
 </header>
 
@@ -1418,8 +1418,8 @@ $('syncCopyKey').onclick=async ()=>{
   catch(e){ prompt('Copia la chiave:', cfg.token); }
 };
 function showRecoverHint(){
-  const html='<div class="exp" id="recoverHint" style="margin:0 0 14px;border:2px solid var(--volt)"><span class="tape volt">Archivio vuoto qui</span><div class="hint" style="margin-top:8px;margin-bottom:0">Hai già inventariato da un\'altra icona, browser o dispositivo? I dati sono al sicuro su GitHub: <b>collega la sincronizzazione</b> e li ritrovi tutti, foto comprese.</div><div class="row"><button class="btn-volt" id="recoverGo">Collega e recupera</button></div></div>';
-  ['v-cap','v-search'].forEach(v=>{ const sec=$(v); if(sec && !sec.querySelector('#recoverHint')) sec.insertAdjacentHTML('afterbegin', html.replace('id="recoverHint"','id="recoverHint" data-v="'+v+'"').replace('id="recoverGo"','class="recoverGo"')); });
+  const html='<div class="exp" id="recoverHint" style="margin:0 0 14px;border:2px solid var(--volt)"><span class="tape volt">Archivio vuoto qui</span><div class="hint" style="margin-top:8px;margin-bottom:0">Hai già inventariato da un\'altra icona, browser o dispositivo? I dati sono al sicuro su GitHub: <b>collega la sincronizzazione</b> e li ritrovi tutti, foto comprese.</div><div class="row"><button class="btn-volt recoverGo" type="button">Collega e recupera</button></div></div>';
+  ['v-cap','v-search'].forEach(v=>{ const sec=$(v); if(sec && !sec.querySelector('#recoverHint')) sec.insertAdjacentHTML('afterbegin', html.replace('id="recoverHint"','id="recoverHint" data-v="'+v+'"')); });
   document.querySelectorAll('.recoverGo').forEach(b=> b.onclick=()=>{ switchView('v-boxes'); setTimeout(()=>{ $('syncCard').scrollIntoView({behavior:'smooth',block:'start'}); $('syncToken').focus(); },60); });
 }
 $('syncOff2').onclick=async ()=>{
