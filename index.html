@@ -195,7 +195,7 @@ header{padding-top:calc(14px + env(safe-area-inset-top))}
 
 <header>
   <h1><span class="dot"></span>Inventario Officina</h1>
-  <div class="sub">v4 · Rilievo · Lotti · Composizione · Ricerca</div>
+  <div class="sub">v4.1 · Rilievo · Lotti · Composizione · Ricerca</div>
   <span class="bkp" id="bkpBadge" style="display:none"></span>
 </header>
 
@@ -308,9 +308,28 @@ header{padding-top:calc(14px + env(safe-area-inset-top))}
 <!-- ========== 4. SCATOLE ========== -->
 <section class="view" id="v-boxes">
   <div id="boxList"></div>
+  <div class="exp" id="syncCard">
+    <span class="tape volt">Sincronizzazione</span>
+    <div id="syncOff">
+      <div class="hint" style="margin-top:8px">Collega un <b>repository GitHub privato</b>: ogni modifica viene inviata da sola e gli altri dispositivi (Mac, iPhone) si aggiornano da soli. Va fatto una volta su ogni dispositivo.</div>
+      <label class="f">Repository dei dati</label>
+      <input type="text" id="syncRepo" value="lucasavatta/inventario-dati" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label class="f">Chiave d'accesso GitHub</label>
+      <input type="password" id="syncToken" placeholder="github_pat_…" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
+      <div class="hint" style="margin-top:6px">Non hai la chiave? <a id="tokLink" target="_blank" rel="noopener">Creala qui (modulo già compilato)</a>: scegli <b>Only select repositories</b> → il repository dei dati → <b>Generate token</b>, poi copiala qui.</div>
+      <div class="row"><button class="btn-volt" id="syncConnect">Collega</button></div>
+    </div>
+    <div id="syncOn" style="display:none">
+      <div class="hint" style="margin-top:8px" id="syncStatus"></div>
+      <div class="row">
+        <button class="btn-volt" id="syncNow">Sincronizza ora</button>
+        <button class="btn-ghost" id="syncOff2">Scollega</button>
+      </div>
+    </div>
+  </div>
   <div class="exp">
-    <span class="tape">Archivio e backup</span>
-    <div class="hint" style="margin-top:8px">I dati vivono <b>su questo dispositivo</b>. L'<b>archivio ZIP</b> contiene tutto (dati, foto, elenco leggibile dall'AI): salvalo su iCloud Drive / Google Drive o mandalo al Mac con AirDrop. Sul Mac apri questa stessa app e fai <b>Importa</b> per navigare il magazzino.</div>
+    <span class="tape">Backup manuale</span>
+    <div class="hint" style="margin-top:8px">Facoltativo se la sincronizzazione è attiva. I dati vivono <b>su questo dispositivo</b>. L'<b>archivio ZIP</b> contiene tutto (dati, foto, elenco leggibile dall'AI): salvalo su iCloud Drive / Google Drive o mandalo al Mac con AirDrop. Sul Mac apri questa stessa app e fai <b>Importa</b> per navigare il magazzino.</div>
     <div class="row">
       <button class="btn-volt" id="expZip">Esporta archivio ZIP</button>
     </div>
@@ -458,32 +477,59 @@ const store = (()=>{ let dbP=null;
     clear: async () => { await tx('readwrite',s=>s.clear()); }
   };
 })();
-let meta = {lastChange:0, lastExport:0};
+let meta = {lastChange:0, lastExport:0, changeSeq:0, pushedSeq:0, remoteHead:null, dirtyPhotos:[], lastSync:0};
+let deleted = {};          // tombstone: id -> ms cancellazione (servono alla sincronizzazione)
+let snap = new Map();      // fotografia dell'ultimo stato salvato, per capire cosa è cambiato
+const canon = o => { const {upd, ...r} = o; return stableStr(r); };
+function stableStr(v){
+  if(Array.isArray(v)) return '['+v.map(stableStr).join(',')+']';
+  if(v && typeof v==='object') return '{'+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+stableStr(v[k])).join(',')+'}';
+  return JSON.stringify(v===undefined?null:v);
+}
+function takeSnap(){ snap=new Map(); for(const i of index) snap.set('i:'+i.id, canon(i)); for(const l of lots) snap.set('l:'+l.id, canon(l)); }
+async function persistIndex(){ await store.set('inventory-index', JSON.stringify({items:index, lots, deleted})); }
+async function saveMeta(){ try{ await store.set('meta', meta); }catch(e){} }
 
 async function loadIndex(){
   try{
     const r = await store.get('inventory-index');
-    if(r){ const d = JSON.parse(r.value); index = d.items||[]; lots = d.lots||[]; }
+    if(r){ const d = JSON.parse(r.value); index = d.items||[]; lots = d.lots||[]; deleted = d.deleted||{}; }
     const m = await store.get('meta'); if(m) meta = {...meta, ...m.value};
+    const c = await store.get('sync-cfg'); if(c && c.value && c.value.token) cfg = c.value;
   }catch(e){ index=[]; lots=[]; }
-  refreshAll(); updateBackupBadge(); handleHash();
+  takeSnap();
+  refreshAll(); updateBackupBadge(); renderSyncCard(); handleHash();
   try{ if(navigator.storage&&navigator.storage.persist) await navigator.storage.persist(); }catch(e){}
   updateStorageInfo();
+  if(cfg) sync();
 }
 async function saveIndex(){
   try{
-    await store.set('inventory-index', JSON.stringify({items:index, lots}));
-    meta.lastChange = Date.now(); await store.set('meta', meta); updateBackupBadge();
+    const now=Date.now(); let changed=false; const seen=new Set();
+    for(const i of index){ const k='i:'+i.id; seen.add(k); if(snap.get(k)!==canon(i)){ i.upd=now; changed=true; } }
+    for(const l of lots){ const k='l:'+l.id; seen.add(k); if(snap.get(k)!==canon(l)){ l.upd=now; changed=true; } }
+    for(const k of snap.keys()) if(!seen.has(k)){ deleted[k.slice(2)]=now; changed=true; }
+    takeSnap();
+    await persistIndex();
+    if(changed){ meta.lastChange=now; meta.changeSeq=(meta.changeSeq||0)+1; }
+    await saveMeta(); updateBackupBadge();
+    if(changed) scheduleSync();
   }
   catch(e){ toast('Errore salvataggio indice'); }
 }
+async function putPhoto(id, b64){
+  if(photoCache[id]===b64) return;
+  await store.set('photo-'+id, b64); photoCache[id]=b64;
+  if(!(meta.dirtyPhotos||[]).includes(id)){ meta.dirtyPhotos=[...(meta.dirtyPhotos||[]), id]; await saveMeta(); }
+}
 function updateBackupBadge(){
   const b=$('bkpBadge'); if(!b) return;
+  if(cfg){ return renderSyncBadge(); }
   if(!index.length && !lots.length){ b.style.display='none'; return; }
   b.style.display='inline-block';
   const days = meta.lastExport ? Math.floor((Date.now()-meta.lastExport)/864e5) : null;
   const pending = meta.lastChange > meta.lastExport;
-  if(!meta.lastExport){ b.className='bkp warn'; b.textContent='⚠ Mai fatto un backup — tocca qui'; }
+  if(!meta.lastExport){ b.className='bkp warn'; b.textContent='⚠ Sincronizzazione non attiva — tocca qui'; }
   else if(pending && days>=7){ b.className='bkp warn'; b.textContent='⚠ Ultimo backup '+days+' gg fa — tocca qui'; }
   else if(pending){ b.className='bkp'; b.textContent='Modifiche da salvare · backup '+(days===0?'oggi':days+' gg fa'); }
   else { b.className='bkp ok'; b.textContent='✓ Backup aggiornato'; }
@@ -494,19 +540,162 @@ async function updateStorageInfo(){
   try{
     if(navigator.storage&&navigator.storage.estimate){
       const e=await navigator.storage.estimate();
-      t+='Spazio usato: '+(e.usage/1048576).toFixed(1)+' MB. ';
+      t+='Spazio usato su questo dispositivo: '+(e.usage/1048576).toFixed(1)+' MB. ';
     }
     if(navigator.storage&&navigator.storage.persisted){
-      t+= (await navigator.storage.persisted()) ? 'Archivio protetto dalla pulizia automatica.' : 'Il browser può liberare spazio: fai il backup ZIP regolarmente.';
+      t+= (await navigator.storage.persisted()) ? 'Archivio protetto dalla pulizia automatica.' : (cfg?'Copia completa su GitHub: se il browser libera spazio, i dati si riscaricano.':'Il browser può liberare spazio: attiva la sincronizzazione o fai il backup ZIP.');
     }
   }catch(e){}
   el.textContent=t;
 }
+const photoPath = id => {
+  const it=index.find(x=>x.id===id); if(it) return it.hasPhoto ? 'foto/pezzi/'+id+'.jpg' : null;
+  return lots.some(l=>l.id===id) ? 'foto/lotti/'+id+'.jpg' : null;
+};
+const photoInflight = {};
 async function getPhoto(id){
-  if(photoCache[id]!==undefined) return photoCache[id];
-  try{ const r = await store.get('photo-'+id); photoCache[id]=r?r.value:null; }
-  catch(e){ photoCache[id]=null; }
-  return photoCache[id];
+  if(photoCache[id]) return photoCache[id];
+  try{ const r = await store.get('photo-'+id); if(r){ photoCache[id]=r.value; return r.value; } }catch(e){}
+  // non è su questo dispositivo: la prendo dal repository (la scarico una volta sola)
+  if(cfg && navigator.onLine && photoPath(id)){
+    if(!photoInflight[id]) photoInflight[id]=(async()=>{
+      try{
+        const r=await gh('/contents/'+photoPath(id)+'?ref='+encodeURIComponent(cfg.branch),{accept:'application/vnd.github.raw+json',raw:true});
+        const b64=await blobToDataUrl(new Blob([await r.arrayBuffer()],{type:'image/jpeg'}));
+        await store.set('photo-'+id,b64); photoCache[id]=b64; return b64;
+      }catch(e){ return null; } finally{ setTimeout(()=>delete photoInflight[id], 30000); }
+    })();
+    return await photoInflight[id];
+  }
+  return null;
+}
+const blobToDataUrl = b => new Promise((res,rej)=>{ const f=new FileReader(); f.onload=()=>res(f.result); f.onerror=rej; f.readAsDataURL(b); });
+
+/* ================= sincronizzazione con repository GitHub privato =================
+   Ogni dispositivo tiene la sua copia locale (funziona offline). A ogni modifica,
+   dopo qualche secondo: scarica lo stato remoto, unisce record per record (vince la
+   modifica più recente, le cancellazioni sono registrate), e carica il risultato in
+   un unico commit (inventario.json + .md + .csv + foto nuove). */
+let cfg = null;                 // {repo:'utente/inventario-dati', token, branch}
+let syncing=false, syncAgain=false, syncTimer=null, syncState='off', syncMsg='';
+const DEVICE = /iPhone/.test(navigator.userAgent)?'iPhone':/iPad/.test(navigator.userAgent)?'iPad':/Macintosh/.test(navigator.userAgent)?'Mac':/Android/.test(navigator.userAgent)?'Android':'browser';
+async function gh(path, opt={}){
+  let r;
+  try{
+    r=await fetch('https://api.github.com/repos/'+cfg.repo+path, {method:opt.method||'GET', body:opt.body, cache:'no-store',
+      headers:{'Authorization':'Bearer '+cfg.token, 'Accept':opt.accept||'application/vnd.github+json', ...(opt.body?{'Content-Type':'application/json'}:{})}});
+  }catch(e){ const er=new Error('rete'); er.status=0; throw er; }
+  if(!r.ok){ const e=new Error('GitHub '+r.status); e.status=r.status; try{ e.body=await r.json(); }catch(_){} throw e; }
+  if(opt.raw) return r;
+  return r.status===204?null:r.json();
+}
+const stripRemote = d => ({
+  items:(d.items||[]).map(({photo,lotPhoto,...i})=>({tags:[],...i})),
+  lots:(d.lots||[]).map(({photo,...l})=>l),
+  deleted:d.deleted||{}
+});
+const dataStr = d => stableStr({items:[...d.items].sort((a,b)=>a.id<b.id?-1:1), lots:[...d.lots].sort((a,b)=>a.id<b.id?-1:1), deleted:d.deleted||{}});
+function mergeSets(L, R){
+  const del={...(R.deleted||{})};
+  for(const [k,v] of Object.entries(L.deleted||{})) if(!(del[k]>=v)) del[k]=v;
+  const ver = x => x.upd||x.ts||0;
+  const mm=(a,b)=>{
+    const m=new Map(); for(const x of b) m.set(x.id,x);
+    for(const x of a){ const y=m.get(x.id); if(!y || ver(x)>=ver(y)) m.set(x.id,x); }
+    return [...m.values()].filter(x=>!(del[x.id] && del[x.id]>=ver(x))).sort((p,q)=>(q.ts||0)-(p.ts||0));
+  };
+  return {items:mm(L.items,R.items), lots:mm(L.lots,R.lots), deleted:del};
+}
+async function applyMerged(m){
+  const before=dataStr({items:index,lots,deleted});
+  index=m.items; lots=m.lots; deleted=m.deleted;
+  takeSnap(); await persistIndex();
+  if(before!==dataStr(m)){
+    refreshAll();
+    if(openLotId && lotById(openLotId)){ renderLotMarkers(); renderLotPieces(); }
+    return true;
+  }
+  return false;
+}
+const localDirty = () => (meta.changeSeq||0)>(meta.pushedSeq||0) || (meta.dirtyPhotos||[]).length>0;
+function scheduleSync(ms=2500){ if(!cfg) return; clearTimeout(syncTimer); syncTimer=setTimeout(sync, ms); setSyncState(navigator.onLine?'pending':'offline'); }
+function setSyncState(s,msg){ syncState=s; syncMsg=msg||''; renderSyncBadge(); renderSyncStatus(); }
+async function sync(){
+  if(!cfg) return;
+  if(syncing){ syncAgain=true; return; }
+  if(!navigator.onLine){ setSyncState('offline'); return; }
+  syncing=true; setSyncState('run');
+  let more=false, pulled=false;
+  try{
+    let done=false;
+    for(let attempt=0; attempt<4 && !done; attempt++){
+      const ref=await gh('/git/ref/heads/'+encodeURIComponent(cfg.branch));
+      const head=ref.object.sha;
+      if(head===meta.remoteHead && !localDirty()){ done=true; break; }   // niente di nuovo da nessuna parte
+      let remote={items:[],lots:[],deleted:{}}, hadRemote=false;
+      try{
+        const r=await gh('/contents/inventario.json?ref='+head,{accept:'application/vnd.github.raw+json',raw:true});
+        remote=stripRemote(JSON.parse(await r.text())); hadRemote=true;
+      }catch(e){ if(e.status!==404) throw e; }
+      const merged=mergeSets({items:index,lots,deleted}, remote);
+      if(await applyMerged(merged)) pulled=true;
+      const seq=meta.changeSeq||0;
+      const valid=new Set([...index.filter(i=>i.hasPhoto).map(i=>i.id), ...lots.map(l=>l.id)]);
+      const photos=(meta.dirtyPhotos||[]).filter(id=>valid.has(id)).slice(0,30);
+      const stale=(meta.dirtyPhotos||[]).filter(id=>!valid.has(id));
+      if(hadRemote && dataStr(merged)===dataStr(remote) && !photos.length){
+        meta.remoteHead=head; meta.pushedSeq=seq; meta.dirtyPhotos=(meta.dirtyPhotos||[]).filter(id=>!stale.includes(id));
+        meta.lastSync=Date.now(); done=true; break;
+      }
+      // costruisco un unico commit
+      const base=await gh('/git/commits/'+head);
+      const tree=[];
+      for(const id of photos){
+        const p=await store.get('photo-'+id); if(!p) continue;
+        const bl=await gh('/git/blobs',{method:'POST',body:JSON.stringify({content:p.value.slice(p.value.indexOf(',')+1),encoding:'base64'})});
+        tree.push({path:photoPath(id),mode:'100644',type:'blob',sha:bl.sha});
+      }
+      tree.push({path:'inventario.json',mode:'100644',type:'blob',content:JSON.stringify(buildJson(),null,1)});
+      tree.push({path:'inventario.md',mode:'100644',type:'blob',content:buildMarkdown()});
+      tree.push({path:'inventario.csv',mode:'100644',type:'blob',content:buildCsv()});
+      tree.push({path:'LEGGIMI.md',mode:'100644',type:'blob',content:README_AI});
+      const t=await gh('/git/trees',{method:'POST',body:JSON.stringify({base_tree:base.tree.sha,tree})});
+      const msg='Sync '+DEVICE+': '+index.length+' voci, '+lots.length+' lotti'+(photos.length?', '+photos.length+' foto':'');
+      const c=await gh('/git/commits',{method:'POST',body:JSON.stringify({message:msg,tree:t.sha,parents:[head]})});
+      try{ await gh('/git/refs/heads/'+encodeURIComponent(cfg.branch),{method:'PATCH',body:JSON.stringify({sha:c.sha,force:false})}); }
+      catch(e){ if(e.status===422||e.status===409) continue; throw e; }   // qualcun altro ha appena sincronizzato: riprovo unendo
+      meta.remoteHead=c.sha; meta.pushedSeq=seq;
+      meta.dirtyPhotos=(meta.dirtyPhotos||[]).filter(id=>!photos.includes(id) && !stale.includes(id));
+      meta.lastSync=Date.now(); done=true;
+      if((meta.dirtyPhotos||[]).length) more=true;
+    }
+    if(!done) throw Object.assign(new Error('conflitto'),{status:-1});
+    await saveMeta();
+    setSyncState('ok');
+    if(pulled) toast('Aggiornato dal cloud ✓');
+  }catch(e){
+    await saveMeta();
+    if(e.status===0) setSyncState('offline');
+    else setSyncState('error', e.status===401?'chiave non valida o scaduta':e.status===403?'la chiave non ha il permesso di scrittura':e.status===404?'repository non trovato':e.status===409?'repository vuoto: crealo con un README':e.status===-1?'troppi tentativi, riprovo più tardi':'errore '+(e.status||e.message));
+  }finally{
+    syncing=false;
+    if(syncAgain||more){ syncAgain=false; scheduleSync(more?500:1500); }
+  }
+}
+window.addEventListener('online', ()=>sync());
+window.addEventListener('offline', ()=>{ if(cfg) setSyncState('offline'); });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') sync(); });
+setInterval(()=>{ if(cfg && document.visibilityState==='visible') sync(); }, 60000);
+function renderSyncBadge(){
+  const b=$('bkpBadge'); if(!b||!cfg) return;
+  b.style.display='inline-block';
+  const hm = meta.lastSync ? new Date(meta.lastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '';
+  const q = (meta.changeSeq||0)-(meta.pushedSeq||0);
+  if(syncState==='run'){ b.className='bkp'; b.textContent='☁ Sincronizzo…'; }
+  else if(syncState==='pending'){ b.className='bkp'; b.textContent='☁ Modifiche in invio…'; }
+  else if(syncState==='offline'){ b.className='bkp'; b.textContent='☁ Offline'+(localDirty()?' · modifiche in coda':'')+(hm?' · ultima sync '+hm:''); }
+  else if(syncState==='error'){ b.className='bkp warn'; b.textContent='⚠ Sync: '+syncMsg+' — tocca qui'; }
+  else { b.className='bkp ok'; b.textContent='☁ Sincronizzato'+(hm?' alle '+hm:''); }
 }
 function refreshAll(){
   updateCounters(); renderComp(); renderSearch(); renderBoxes(); refreshTargetBox(); refreshLotBoxSel();
@@ -680,7 +869,7 @@ $('saveBtn').onclick = async ()=>{
     ts: old?old.ts:Date.now()
   };
   try{
-    if(curPhoto){ await store.set('photo-'+id,curPhoto); photoCache[id]=curPhoto; if(old&&old.light){item.light=false;item.marker=null;} }
+    if(curPhoto){ await putPhoto(id,curPhoto); if(old&&old.light){item.light=false;item.marker=null;} }
     else if(editId && old && !old.light){ item.hasPhoto=false; try{await store.delete('photo-'+id);}catch(e){} photoCache[id]=null; }
     else if(old&&old.light){ item.hasPhoto=false; }
     if(editId) index=index.map(x=>x.id===id?item:x); else index.unshift(item);
@@ -709,7 +898,7 @@ $('saveLotBtn').onclick = async ()=>{
   const id=uid();
   const lot={ id, title:$('lotTitle').value.trim()||'Lotto '+new Date().toLocaleDateString('it-IT'), box:box||null, ts:Date.now() };
   try{
-    await store.set('photo-'+id, curLotPhoto); photoCache[id]=curLotPhoto;
+    await putPhoto(id, curLotPhoto);
     lots.unshift(lot);
     await saveIndex();
     if(lotNfcWanted && lot.box) await nfcWriteBox(lot.box);
@@ -956,8 +1145,7 @@ $('mSave').onclick=async ()=>{
     }else{
       item.light=false; item.marker=null; item.hasPhoto=true;
       item.box=null;                              // autonomo → componi
-      await store.set('photo-'+id, pendingPiece.cropB64);
-      photoCache[id]=pendingPiece.cropB64;
+      await putPhoto(id, pendingPiece.cropB64);
     }
     index.unshift(item);
     await saveIndex();
@@ -1141,6 +1329,61 @@ function download(name, mime, content){
   a.download=name; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
+/* ================= pannello sincronizzazione ================= */
+function tokenUrl(repo){
+  const owner=(repo||'').split('/')[0]||'';
+  return 'https://github.com/settings/personal-access-tokens/new?name='+encodeURIComponent('Inventario '+DEVICE)
+    +'&description='+encodeURIComponent('Sincronizzazione app Inventario Officina ('+DEVICE+')')
+    +(owner?'&target_name='+encodeURIComponent(owner):'')+'&expires_in=none&contents=write';
+}
+function renderSyncCard(){
+  $('syncOff').style.display = cfg?'none':'block';
+  $('syncOn').style.display = cfg?'block':'none';
+  $('tokLink').href = tokenUrl($('syncRepo').value);
+  renderSyncStatus(); updateBackupBadge();
+}
+function renderSyncStatus(){
+  const el=$('syncStatus'); if(!el||!cfg) return;
+  const hm = meta.lastSync ? new Date(meta.lastSync).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'mai';
+  const st = {run:'sincronizzazione in corso…', pending:'modifiche in invio…', offline:'offline: le modifiche partono appena torna la rete', error:'<b style="color:var(--warn)">errore: '+esc(syncMsg)+'</b>', ok:'tutto aggiornato', off:'pronto'}[syncState]||'';
+  el.innerHTML='Collegato a <b>'+esc(cfg.repo)+'</b> da questo '+DEVICE+'.<br>Stato: '+st+'<br>Ultima sincronizzazione: '+hm
+    +((meta.dirtyPhotos||[]).length?'<br>Foto da inviare: '+meta.dirtyPhotos.length:'');
+}
+$('syncRepo').addEventListener('input', ()=>{ $('tokLink').href=tokenUrl($('syncRepo').value); });
+$('syncConnect').onclick=async ()=>{
+  const repo=$('syncRepo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/$/,'');
+  const token=$('syncToken').value.trim();
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){ toast('Repository nel formato utente/nome'); return; }
+  if(!token){ toast('Incolla la chiave d\'accesso'); return; }
+  $('syncConnect').disabled=true; $('syncConnect').textContent='Verifico…';
+  const prev=cfg; cfg={repo, token, branch:'main'};
+  try{
+    const info=await fetch('https://api.github.com/repos/'+repo,{headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'},cache:'no-store'});
+    if(info.status===401) throw new Error('Chiave non valida');
+    if(info.status===404) throw new Error('Repository non trovato o non incluso nella chiave');
+    if(!info.ok) throw new Error('GitHub ha risposto '+info.status);
+    const j=await info.json();
+    if(!j.private && !confirm('Attenzione: '+repo+' è PUBBLICO, i dati sarebbero visibili a tutti. Continuare?')) throw new Error('Annullato');
+    if(j.permissions && !j.permissions.push) throw new Error('La chiave non ha il permesso di scrittura (Contents: Read and write)');
+    cfg.branch=j.default_branch||'main';
+    try{ await gh('/git/ref/heads/'+encodeURIComponent(cfg.branch)); }
+    catch(e){ if(e.status===404||e.status===409) throw new Error('Il repository è vuoto: crealo con l\'opzione "Add README"'); throw e; }
+    await store.set('sync-cfg', cfg);
+    // al primo collegamento invio tutte le foto presenti su questo dispositivo
+    const ph=(await store.keys()).filter(k=>String(k).startsWith('photo-')).map(k=>String(k).slice(6));
+    meta.dirtyPhotos=[...new Set([...(meta.dirtyPhotos||[]), ...ph])]; meta.remoteHead=null; await saveMeta();
+    $('syncToken').value='';
+    renderSyncCard(); toast('Collegato ✓ sincronizzo…');
+    sync();
+  }catch(e){ cfg=prev; toast(e.message||'Errore di collegamento'); }
+  finally{ $('syncConnect').disabled=false; $('syncConnect').textContent='Collega'; }
+};
+$('syncNow').onclick=()=>sync();
+$('syncOff2').onclick=async ()=>{
+  if(!confirm('Scollegare questo dispositivo dalla sincronizzazione?\nI dati restano qui e sul repository.')) return;
+  cfg=null; await store.delete('sync-cfg'); setSyncState('off'); renderSyncCard();
+};
+
 const today = () => new Date().toISOString().slice(0,10);
 const itemPhotoPath = i => i.hasPhoto ? 'foto/pezzi/'+i.id+'.jpg' : null;
 const lotPhotoPath = id => 'foto/lotti/'+id+'.jpg';
@@ -1156,11 +1399,12 @@ function buildCsv(){
 function buildJson(){
   const boxes=allBoxes().map(b=>({code:b, items:index.filter(i=>i.box===b).length, lots:lots.filter(l=>l.box===b).map(l=>l.id), nfcUrl:boxUrl(b)}));
   return {
-    app:'inventario-officina', schema:2, exported:new Date().toISOString(), appUrl:appBase(),
+    app:'inventario-officina', schema:3, exported:new Date().toISOString(), device:DEVICE, appUrl:appBase(),
     counts:{items:index.length, pieces:index.reduce((s,i)=>s+(+i.qty||0),0), boxes:boxes.length, lots:lots.length, unassigned:unassigned().length},
     boxes,
     lots: lots.map(l=>({...l, photo:lotPhotoPath(l.id)})),
-    items: index.map(i=>({...i, photo:itemPhotoPath(i), lotPhoto: i.lotId?lotPhotoPath(i.lotId):null}))
+    items: index.map(i=>({...i, photo:itemPhotoPath(i), lotPhoto: i.lotId?lotPhotoPath(i.lotId):null})),
+    deleted
   };
 }
 function buildMarkdown(){
@@ -1185,7 +1429,7 @@ function buildMarkdown(){
 }
 const README_AI = `# Archivio Inventario Officina \u2014 come leggerlo
 
-Questo ZIP \u00E8 l'export completo dell'app Inventario Officina (dati creati sul telefono).
+Questi sono i dati completi dell'app Inventario Officina: si aggiornano da soli a ogni sincronizzazione (repository privato) oppure arrivano da un export ZIP.
 
 ## File
 - **inventario.md** \u2014 elenco leggibile, raggruppato per scatola. \u00C8 il file pi\u00F9 comodo da dare a un'AI.
@@ -1195,9 +1439,12 @@ Questo ZIP \u00E8 l'export completo dell'app Inventario Officina (dati creati su
 - **foto/lotti/ID.jpg** \u2014 foto di una scatola/lotto con pi\u00F9 pezzi; i pezzi "segnati" hanno un marker con coordinate relative (x,y da 0 a 1) su questa foto.
 
 ## Schema inventario.json
-- items[]: id, box (codice scatola, null = da sistemare), cat, desc, tags[], qty, state (Nuovo / Recupero / Da testare / Guasto/ricambi), hasPhoto, photo (percorso), lotId, lotPhoto, light (true = pezzo segnato sulla foto lotto, senza foto propria), marker {x,y}, nfc, ts (ms epoch)
+- items[]: id, box (codice scatola, null = da sistemare), cat, desc, tags[], qty, state (Nuovo / Recupero / Da testare / Guasto/ricambi), hasPhoto, photo (percorso), lotId, lotPhoto, light (true = pezzo segnato sulla foto lotto, senza foto propria), marker {x,y}, nfc, ts (creazione, ms epoch), upd (ultima modifica)
 - lots[]: id, title, box, ts, photo
 - boxes[]: code, items (n. voci), lots, nfcUrl (link scritto sul tag NFC della scatola)
+- deleted{}: id -> data cancellazione (serve alla sincronizzazione, si pu\u00F2 ignorare)
+
+Lo storico delle modifiche \u00E8 nella cronologia dei commit (un commit per ogni sincronizzazione).
 
 ## Domande tipo da fare all'AI
 - "Ho ancora una batteria 4S? In che scatola?"
@@ -1205,8 +1452,8 @@ Questo ZIP \u00E8 l'export completo dell'app Inventario Officina (dati creati su
 - "Guarda le foto dei lotti e dimmi se ci sono pezzi non ancora censiti."
 - "Proponi una riorganizzazione delle scatole per categoria."
 
-## Reimportare
-Apri l'app (stesso indirizzo web) \u2192 scheda Scatole \u2192 Importa archivio \u2192 scegli questo ZIP.
+## Reimportare uno ZIP
+Apri l'app \u2192 scheda Scatole \u2192 Importa archivio \u2192 scegli lo ZIP. Con la sincronizzazione attiva, i dati importati diventano la versione corrente su tutti i dispositivi.
 `;
 async function buildZip(){
   if(!window.JSZip){ toast('Componente ZIP non caricato: ricarica la pagina'); return null; }
@@ -1264,7 +1511,7 @@ $('nfcDirect').onclick=async ()=>{
   toast('ZIP scaricato \u2713'); $('nfcBg').classList.remove('show'); resetSheet();
 };
 $('nfcClose').onclick=()=>{ $('nfcBg').classList.remove('show'); resetSheet(); };
-$('bkpBadge').onclick=()=>{ switchView('v-boxes'); setTimeout(()=>$('expZip').scrollIntoView({behavior:'smooth',block:'center'}),50); };
+$('bkpBadge').onclick=()=>{ switchView('v-boxes'); setTimeout(()=>$('syncCard').scrollIntoView({behavior:'smooth',block:'start'}),50); if(cfg && syncState!=='run') sync(); };
 
 $('expCsv').onclick=()=>{
   download('inventario-officina-'+today()+'.csv','text/csv;charset=utf-8',buildCsv());
@@ -1300,13 +1547,14 @@ $('impInput').addEventListener('change', async e=>{
     const items=(data.items||[]).map(({photo,lotPhoto,...i})=>({tags:[],...i}));
     const newLots=(data.lots||[]).map(({photo,...l})=>l);
     if(!items.length && !newLots.length){ toast('File senza dati di inventario'); return; }
-    const msg='Sostituire l\'archivio di questo dispositivo ('+index.length+' voci, '+lots.length+' lotti)\ncon quello del file ('+items.length+' voci, '+newLots.length+' lotti, '+Object.keys(photos).length+' foto)?';
+    const msg='Sostituire l\'archivio di questo dispositivo ('+index.length+' voci, '+lots.length+' lotti)\ncon quello del file ('+items.length+' voci, '+newLots.length+' lotti, '+Object.keys(photos).length+' foto)?'+(cfg?'\n\nCon la sincronizzazione attiva diventer\u00E0 la versione corrente anche sugli altri dispositivi.':'');
     if(!confirm(msg)) return;
-    await store.clear();
-    for(const [id,p] of Object.entries(photos)) await store.set('photo-'+id, p);
-    index=items; lots=newLots; photoCache={};
-    await store.set('inventory-index', JSON.stringify({items:index, lots}));
-    meta={lastChange:Date.now(), lastExport:Date.now()}; await store.set('meta',meta);
+    for(const k of await store.keys()) if(String(k).startsWith('photo-')) await store.delete(k);
+    photoCache={};
+    for(const [id,p] of Object.entries(photos)) await putPhoto(id, p);
+    index=items; lots=newLots;
+    meta.lastExport=Date.now();
+    await saveIndex();          // le differenze diventano modifiche: con la sync attiva vanno su tutti i dispositivi
     compSel.clear(); filters={box:null,cat:null}; showOnly=null;
     refreshAll(); updateBackupBadge(); updateStorageInfo();
     toast('Archivio importato \u2713 '+items.length+' voci');
