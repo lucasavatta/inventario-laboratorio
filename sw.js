@@ -1,6 +1,6 @@
 /* Service worker: l'app funziona anche senza rete (in officina).
    I DATI non passano di qui: restano in IndexedDB sul dispositivo. */
-const VERSION = 'inv-v4.2.1';
+const VERSION = 'inv-v4.2.2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './jszip.min.js',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
@@ -17,7 +17,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   // pagina: prima la rete (aggiornamenti), se offline la copia in cache
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(r => { const c = r.clone(); caches.open(VERSION).then(x => x.put('./index.html', c)); return r; })
+    e.respondWith(fetch(req, {cache: 'no-cache'}).then(r => { const c = r.clone(); caches.open(VERSION).then(x => x.put('./index.html', c)); return r; })
       .catch(() => caches.match('./index.html')));
     return;
   }
