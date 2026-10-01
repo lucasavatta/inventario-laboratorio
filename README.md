@@ -1,6 +1,6 @@
 # Inventario Officina
 
-Web app per l'inventario del laboratorio: rilievo con foto e dettatura, **Foto Lotto** (una foto per scatola, pezzi segnati o ritagliati), composizione delle scatole, ricerca, **tag NFC** sulle scatole, export per PC e AI.
+Web app per l'inventario del laboratorio (e non solo: armadio per il cambio di stagione, cantina…): rilievo con foto e dettatura, **Foto Lotto** (una foto per scatola, pezzi segnati o ritagliati), composizione delle scatole, ricerca, **tag NFC** sulle scatole, export per PC e AI.
 
 **App:** https://lucasavatta.github.io/inventario-laboratorio/
 
@@ -14,20 +14,31 @@ Web app per l'inventario del laboratorio: rilievo con foto e dettatura, **Foto L
    L'icona apre l'app dentro Safari: così l'icona e i tag NFC vedono **lo stesso archivio**.
    (Con "Apri come web app" attivo l'app è a tutto schermo ma ha un archivio separato da Safari, e i tag NFC aprirebbero l'archivio sbagliato.)
 3. Installa l'app gratuita **NFC Tools** (App Store) per scrivere i tag.
-4. **Sincronizzazione**: Scatole → Sincronizzazione → *Creala qui* (apre GitHub con il modulo già compilato) → **Only select repositories** → `inventario-dati` → **Generate token** → copia la chiave → incollala nell'app → **Collega**.
+4. **Sincronizzazione**: Opzioni → Sincronizzazione → *Creala qui* (apre GitHub con il modulo già compilato) → **Only select repositories** → `inventario-dati` → **Generate token** → copia la chiave → incollala nell'app → **Collega**.
    Stessa cosa sul Mac (una chiave per dispositivo: se perdi il telefono revochi solo quella).
 
 ## Flusso di lavoro
 
 1. **Rilievo** (telefono) — Scatta: pezzo singolo o Foto Lotto.
 2. **Componi** — marchi o ritagli i pezzi nei lotti, metti i pezzi sciolti nelle scatole.
-3. **Tag NFC delle scatole** — Scatole → **NFC** sulla scatola → **Copia link** → in NFC Tools: Scrivi → Aggiungi record → **URL/URI** → incolla → Scrivi → avvicina il tag.
+3. **Scatole** — scheda Scatole: ogni scatola ha un colore, l'anteprima delle foto, e (facoltativi) un **nome** e il **posto** dove sta (✏️ dalla scatola aperta).
+4. **Tag NFC delle scatole** — apri la scatola → **NFC** → **Copia link** → in NFC Tools: Scrivi → Aggiungi record → **URL/URI** → incolla → Scrivi → avvicina il tag.
    Da quel momento: avvicini l'iPhone sbloccato al tag → tocchi la notifica → si apre l'elenco di quella scatola.
-4. **Sincronizzazione automatica** — non devi fare niente: qualche secondo dopo ogni modifica l'app invia i dati al repository privato (un commit per volta, con lo storico). Senza rete le modifiche restano in coda e partono appena torna.
+5. **Sincronizzazione automatica** — non devi fare niente: qualche secondo dopo ogni modifica l'app invia i dati al repository privato (un commit per volta, con lo storico). Senza rete le modifiche restano in coda e partono appena torna.
    Il badge in alto dice lo stato: ☁ Sincronizzato · Modifiche in invio · Offline · ⚠ errore.
-5. **Sul Mac** — apri lo stesso link: all'apertura, quando torni sulla pagina e ogni minuto scarica le novità (foto comprese, quando servono). Puoi anche modificare dal Mac: le modifiche tornano sul telefono.
+6. **Sul Mac** — apri lo stesso link: all'apertura, quando torni sulla pagina e ogni minuto scarica le novità (foto comprese, quando servono). Puoi anche modificare dal Mac: le modifiche tornano sul telefono.
    Se lo stesso pezzo viene modificato su due dispositivi, vince la modifica più recente.
-6. **Backup manuale ZIP** — facoltativo, resta in Scatole → Esporta archivio ZIP.
+7. **Backup manuale ZIP** — facoltativo, in Opzioni → Esporta archivio ZIP.
+
+## Archivi (laboratorio, armadio, cantina…)
+
+Opzioni → Archivi → **Nuovo archivio**: si parte da un modello (Armadio, Cantina, vuoto) e si cambiano nome, icona, categorie e stati.
+Ogni archivio ha le sue scatole; si passa dall'uno all'altro col pulsante in alto a sinistra. Il tag NFC di una scatola apre direttamente l'archivio giusto.
+
+## Opzioni
+
+- **Aspetto**: 5 temi pastello (Salvia, Lavanda, Pesca, Cielo, Notte), scelti per ogni dispositivo.
+- **Dettatura**: *Automatica* (il 🎤 scrive mentre parli; se il telefono non lo permette passa alla dettatura della tastiera) o *Sempre tastiera*.
 
 ## Dati per l'AI (repository privato o ZIP)
 
@@ -59,4 +70,4 @@ tests/                test automatici (cd tests && npm install && npm test)
 CLAUDE.md             istruzioni per sviluppare il progetto con Claude Code
 ```
 
-Aggiornare l'app: modificare i file e fare push; GitHub Pages pubblica in 1–2 minuti. Alzare `VERSION` in `sw.js` a ogni rilascio.
+Aggiornare l'app: modificare i file e fare push; GitHub Pages pubblica in 1–2 minuti. Alzare `VERSION` in `sw.js` e la versione in `index.html` a ogni rilascio.

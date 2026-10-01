@@ -4,7 +4,7 @@ const { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG } =
 module.exports = async function(){
   const srv = await startServer(); const b = await launch(); const G = mockGitHub(); const C = checker();
   const st = p => p.evaluate(()=>({items:index.map(i=>i.desc+'|'+(i.box||'-')+'|'+i.qty).sort(), lots:lots.length, badge:document.getElementById('bkpBadge').textContent}));
-  const connect = async p => { await p.click('nav button[data-v=v-boxes]'); await p.fill('#syncRepo','luca/dati'); await p.fill('#syncToken','tok'); await tap(p,'#syncConnect'); };
+  const connect = async p => { await p.click('nav button[data-v=v-set]'); await p.fill('#syncRepo','luca/dati'); await p.fill('#syncToken','tok'); await tap(p,'#syncConnect'); };
   try{
     console.log('sync · 1. iPhone: rilievo, poi collega e invia');
     const ph = await device(b, srv.url, 'iPhone', {github:G});
@@ -29,7 +29,7 @@ module.exports = async function(){
     await connect(mac); await waitSync(mac);
     C.check((await st(mac)).items.length===3, 'Mac riceve le 3 voci');
     await mac.click('nav button[data-v=v-search]'); await mac.waitForTimeout(1500);
-    C.check(await mac.locator('#results img').count()===2, 'Mac scarica le foto quando servono');
+    C.check(await mac.locator('#results .thumb.ok').count()===2, 'Mac scarica le foto quando servono');
     const before=G.patches; await mac.evaluate(()=>sync()); await waitSync(mac); await ph.evaluate(()=>sync()); await waitSync(ph);
     C.check(G.patches===before, 'nessun commit se non cambia nulla');
 
@@ -56,6 +56,15 @@ module.exports = async function(){
     console.log('sync · 5. ricarica: dati e collegamento restano');
     await ph.reload(); await ph.waitForTimeout(800); await waitSync(ph);
     C.check((await st(ph)).items.length===2 && /Sincronizzato/.test((await st(ph)).badge), 'dopo ricarica tutto a posto');
+    console.log('sync · 6. archivi e scatole con nome passano da un dispositivo all\'altro');
+    await ph.evaluate(async()=>{ archs.push({id:'armadio-x', ...TPL.armadio, ts:Date.now()}); boxMeta.push({id:'lab/B02',arch:'lab',code:'B02',name:'Elettronica',place:'Garage',ts:Date.now()});
+      index.unshift({id:'mx1',arch:'armadio-x',box:'A1',cat:'Inverno',desc:'Maglioni',tags:[],qty:3,state:'Da tenere',hasPhoto:false,nfc:false,lotId:null,light:false,marker:null,ts:Date.now()}); await saveIndex(); });
+    await waitSync(ph); await mac.evaluate(()=>sync()); await waitSync(mac);
+    C.check(await mac.evaluate(()=>getArchs().some(a=>a.name==='Armadio') && boxInfo('B02')?.place==='Garage' && allBoxes('armadio-x').join()==='A1'), 'il Mac riceve l\'archivio Armadio e il posto della scatola');
+    C.check(await mac.evaluate(()=>items().every(i=>(i.arch||'lab')==='lab')), 'sul Mac il laboratorio non mostra i vestiti');
+    C.check(/Archivio: Armadio[\s\S]*Scatola A1/.test(G.blobs[(()=>{ const c=G.commits[G.ref]; return G.trees[c.tree]['inventario.md']; })()].toString()), 'inventario.md diviso per archivio');
+    const p2=G.patches; await mac.evaluate(()=>sync()); await waitSync(mac); await ph.evaluate(()=>sync()); await waitSync(ph);
+    C.check(G.patches===p2, 'nessun commit inutile anche con archivi e scatole');
     C.check(ph.errs.length===0 && mac.errs.length===0, 'nessun errore JavaScript '+JSON.stringify([...ph.errs,...mac.errs]));
   } finally { await b.close(); srv.close(); }
   return C.failed;

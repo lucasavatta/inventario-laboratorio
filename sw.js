@@ -1,6 +1,6 @@
 /* Service worker: l'app funziona anche senza rete (in officina).
    I DATI non passano di qui: restano in IndexedDB sul dispositivo. */
-const VERSION = 'inv-v4.2.3';
+const VERSION = 'inv-v5.0.0';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './jszip.min.js',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
@@ -21,8 +21,8 @@ self.addEventListener('fetch', e => {
       .catch(() => caches.match('./index.html')));
     return;
   }
-  // font Google e file statici: cache, poi rete
-  if (url.origin === location.origin || /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) {
+  // file statici: cache, poi rete
+  if (url.origin === location.origin) {
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(r => {
       if (r.ok || r.type === 'opaque') { const c = r.clone(); caches.open(VERSION).then(x => x.put(req, c)); }
       return r;

@@ -75,12 +75,24 @@ async function device(b, base, name, opts={}){
   if (opts.github) await ctx.route('https://api.github.com/**', opts.github.handler(name));
   const p = await ctx.newPage(); p.errs=[];
   p.on('pageerror', e=>p.errs.push(e.message));
-  p.on('dialog', d=>d.accept(d.type()==='prompt' ? (opts.promptValue||'B01') : undefined));
+  p.native=0;   // l'app non deve più usare alert/confirm/prompt nativi
+  p.on('dialog', d=>{ p.native++; d.accept(d.type()==='prompt' ? (opts.promptValue||'B01') : undefined); });
+  if (opts.init) await p.addInitScript(opts.init);
   await p.goto(base); await p.waitForTimeout(400);
   return p;
 }
 // click su elementi che possono finire sotto la barra di navigazione fissa
 const tap = async (p,sel) => { await p.locator(sel).first().evaluate(e=>e.scrollIntoView({block:'center'})); await p.click(sel); };
+const dlgText = async (p,text) => { await p.waitForSelector('#dlgBg.show'); await p.fill('#dlgInput',text); await p.click('#dlgOk'); await p.waitForTimeout(250); };
+const dlgOk = async p => { await p.waitForSelector('#dlgBg.show'); await p.click('#dlgOk'); await p.waitForTimeout(250); };
+const dlgChoice = async (p,label) => { await p.waitForSelector('#dlgBg.show'); await p.click('#dlgChoices button:has-text("'+label+'")'); await p.waitForTimeout(250); };
+// nessun elemento più largo dello schermo (niente scorrimento laterale)
+const overflow = p => p.evaluate(()=>{
+  const W=innerWidth, out=[];
+  if(document.documentElement.scrollWidth>W) out.push('pagina '+document.documentElement.scrollWidth+'>'+W);
+  for(const e of document.querySelectorAll('body *')){ const r=e.getBoundingClientRect(); if(r.width && r.height && r.right>W+1 && getComputedStyle(e).visibility!=='hidden') out.push((e.id||e.className||e.tagName)+' '+Math.round(r.right)); }
+  return out.slice(0,5);
+});
 const waitSync = async p => { await p.waitForTimeout(300); await p.waitForFunction(()=>!/Sincronizzo|in invio/.test(document.getElementById('bkpBadge').textContent),null,{timeout:20000}); };
 
 function checker(){
@@ -89,4 +101,4 @@ function checker(){
   return { check, get failed(){ return failed; } };
 }
 
-module.exports = { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG };
+module.exports = { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, dlgText, dlgOk, dlgChoice, overflow };
