@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Inventario Officina</title>
+<meta name="theme-color" content="#23282C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Inventario">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script src="jszip.min.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --concrete:#E8E9E6; --ink:#23282C; --steel:#5C666E; --card:#FFF;
+  --volt:#F2B705; --tape:#1A1D20; --ok:#2E7D4F; --warn:#C0392B;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100%}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--concrete);color:var(--ink);font-size:15px;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+header{background:var(--ink);color:#fff;padding:14px 16px 12px;position:sticky;top:0;z-index:20}
+header h1{font-family:'Saira Condensed',sans-serif;font-weight:800;font-size:22px;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+header h1 .dot{width:10px;height:10px;background:var(--volt);display:inline-block}
+header .sub{font-size:11px;color:#9AA3AA;margin-top:2px;letter-spacing:.04em}
+main{padding:14px 14px 20px;max-width:640px;margin:0 auto}
+.view{display:none}.view.active{display:block}
+
+.tape{display:inline-block;font-family:'Saira Condensed',sans-serif;font-weight:800;background:var(--tape);color:#fff;padding:2px 10px 3px;letter-spacing:.18em;font-size:14px;text-transform:uppercase;transform:rotate(-1.2deg);box-shadow:1px 2px 0 rgba(0,0,0,.25);border-radius:2px}
+.tape.volt{background:var(--volt);color:var(--ink)}
+.tape.grey{background:#9AA3AA;color:var(--ink)}
+
+label.f{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin:14px 0 5px}
+input[type=text],input[type=number],select,textarea{width:100%;padding:11px 12px;border:1.5px solid #C6CBCE;border-radius:8px;font-family:inherit;font-size:15px;background:var(--card);color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--volt);outline-offset:0;border-color:var(--ink)}
+textarea{min-height:64px;resize:vertical}
+.row{display:flex;gap:10px}.row>*{flex:1}
+button{font-family:'Saira Condensed',sans-serif;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border:none;border-radius:8px;cursor:pointer;font-size:15px}
+.btn-main{width:100%;background:var(--ink);color:#fff;padding:14px;margin-top:16px;font-size:17px}
+.btn-main:active{transform:translateY(1px)}
+.btn-main:disabled{opacity:.5}
+.btn-ghost{background:transparent;border:1.5px solid var(--ink);color:var(--ink);padding:9px 14px}
+.btn-volt{background:var(--volt);color:var(--ink);padding:9px 14px}
+.btn-mic{min-width:46px;flex:0 0 46px;background:var(--ink);color:#fff;border-radius:8px;font-size:19px}
+.btn-mic.rec{background:var(--warn);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.6}}
+
+/* segmented */
+.seg{display:flex;background:#D7DAD6;border-radius:10px;padding:4px;margin-bottom:14px}
+.seg button{flex:1;padding:9px 0;background:none;color:var(--steel);border-radius:7px;font-size:14px}
+.seg button.on{background:var(--ink);color:#fff}
+
+.photo-zone{border:2px dashed #B4BABE;border-radius:10px;background:#F4F5F3;min-height:150px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;color:var(--steel);font-size:13px;overflow:hidden;position:relative;cursor:pointer}
+.photo-zone img{width:100%;max-height:260px;object-fit:cover;display:block}
+.photo-zone .cam{font-size:34px}
+.photo-x{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.65);color:#fff;width:30px;height:30px;border-radius:50%;font-size:15px;font-family:inherit}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{background:var(--card);border:1.5px solid var(--ink);border-radius:999px;padding:4px 11px;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.chip b{cursor:pointer;font-weight:700;color:var(--steel)}
+.chip.filter{cursor:pointer;user-select:none}
+.chip.filter.on{background:var(--volt);border-color:var(--volt)}
+.chip.mini{font-size:12px;padding:2px 9px;border-width:1px}
+
+.nfc-opt{display:flex;align-items:center;gap:10px;background:var(--card);border:1.5px solid #C6CBCE;border-radius:8px;padding:10px 12px;margin-top:14px;cursor:pointer;user-select:none}
+.nfc-opt.on{border-color:var(--volt);background:#FDF6DF}
+.nfc-opt .sw{width:40px;height:22px;border-radius:999px;background:#C6CBCE;position:relative;flex:0 0 40px;transition:.15s}
+.nfc-opt.on .sw{background:var(--volt)}
+.nfc-opt .sw::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s}
+.nfc-opt.on .sw::after{left:20px}
+.nfc-opt .t{font-size:13px;line-height:1.4}
+
+.capbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.capbar .n{font-size:13px;color:var(--steel)}
+
+/* compose grid */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cell{position:relative;border-radius:10px;overflow:hidden;background:var(--card);aspect-ratio:1;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.cell img{width:100%;height:100%;object-fit:cover;display:block}
+.cell .nop{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:26px;color:#B4BABE}
+.cell .lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(26,29,32,.82);color:#fff;font-size:10.5px;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .nfcb{position:absolute;top:6px;left:6px;background:var(--volt);color:var(--ink);font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;font-family:'Saira Condensed'}
+.cell.sel{outline:3px solid var(--volt)}
+.cell.sel::after{content:'✓';position:absolute;top:6px;right:6px;width:24px;height:24px;background:var(--volt);color:var(--ink);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800}
+
+/* lot cards */
+.lotcard{background:var(--card);border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:10px;display:flex;cursor:pointer}
+.lotcard .th{width:96px;height:96px;flex:0 0 96px;background:#eee}
+.lotcard .th img{width:100%;height:100%;object-fit:cover;display:block}
+.lotcard .inf{padding:10px 12px;flex:1;min-width:0}
+.lotcard .inf .t{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lotcard .inf .s{font-size:12px;color:var(--steel);margin-top:4px;line-height:1.4}
+.sect{font-family:'Saira Condensed';font-weight:800;font-size:15px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin:16px 0 8px}
+
+.compose-bar{position:fixed;bottom:64px;left:0;right:0;background:var(--ink);padding:10px 14px;display:none;z-index:25}
+.compose-bar.show{display:block}
+.compose-bar .inner{max-width:640px;margin:0 auto;display:flex;gap:10px;align-items:center}
+.compose-bar select{flex:1;padding:10px}
+.compose-bar .cnt{color:var(--volt);font-family:'Saira Condensed';font-weight:800;font-size:17px;flex:0 0 auto}
+
+.card{background:var(--card);border-radius:10px;margin-bottom:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card .body{padding:12px 14px}
+.card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.card .desc{margin-top:7px;font-size:14.5px;line-height:1.45}
+.card .meta{margin-top:8px;font-size:12px;color:var(--steel);display:flex;gap:12px;flex-wrap:wrap}
+.card img{width:100%;max-height:220px;object-fit:cover;display:block;background:#eee}
+.card .acts{display:flex;gap:8px;padding:0 14px 12px;flex-wrap:wrap}
+.card .acts button{padding:7px 12px;font-size:13px}
+.qty{font-family:'Saira Condensed';font-weight:800;font-size:18px}
+.state-pill{font-size:11px;padding:2px 8px;border-radius:999px;background:#EEF0EE;border:1px solid #CDD2D4}
+
+/* marker overlay */
+.mwrap{position:relative;background:#eee}
+.mwrap img{width:100%;display:block;max-height:none;object-fit:contain}
+.mdot{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:var(--volt);color:var(--ink);border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed';font-weight:800;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.mdot.hi{background:var(--warn);color:#fff;transform:scale(1.25)}
+.cropbox{position:absolute;border:2.5px dashed var(--volt);background:rgba(242,183,5,.18);pointer-events:none}
+
+.boxrow{background:var(--card);border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.boxrow .n{font-size:12px;color:var(--steel)}
+
+/* lot editor overlay */
+.overlay{position:fixed;inset:0;background:var(--concrete);z-index:50;display:none;overflow-y:auto;padding-bottom:30px}
+.overlay.show{display:block}
+.overlay .ohead{background:var(--ink);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+.overlay .ohead button{background:none;color:#fff;font-size:22px;padding:0 6px}
+.overlay .ohead .t{font-family:'Saira Condensed';font-weight:800;font-size:18px;letter-spacing:.06em;text-transform:uppercase;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.overlay .obody{padding:14px;max-width:640px;margin:0 auto}
+.modebar{display:flex;gap:8px;margin:12px 0}
+.modebar button{flex:1;padding:10px 4px;font-size:13px;background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.modebar button.on{background:var(--volt);border-color:var(--volt)}
+.hint{font-size:12.5px;color:var(--steel);line-height:1.5;margin-bottom:8px}
+.lotphoto{position:relative;border-radius:10px;overflow:hidden;background:#222;touch-action:pan-y}
+.lotphoto.gesture{touch-action:none}
+.lotphoto img{width:100%;display:block;user-select:none;-webkit-user-drag:none}
+.piece-li{background:var(--card);border-radius:8px;padding:9px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.piece-li .num{width:24px;height:24px;flex:0 0 24px;border-radius:50%;background:var(--volt);border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed';font-weight:800;font-size:12px}
+.piece-li .num.cut{background:#fff;border-style:dashed}
+.piece-li .d{flex:1;min-width:0;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.piece-li button{padding:5px 9px;font-size:12px}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(26,29,32,.55);z-index:60;display:none;align-items:flex-end;justify-content:center}
+.modal-bg.show{display:flex}
+.modal{background:var(--concrete);border-radius:16px 16px 0 0;width:100%;max-width:640px;padding:16px 16px 24px;max-height:88vh;overflow-y:auto}
+.modal h3{font-family:'Saira Condensed';font-weight:800;font-size:18px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.modal .prev{border-radius:8px;overflow:hidden;margin-top:8px;max-height:140px}
+.modal .prev img{width:100%;max-height:140px;object-fit:contain;background:#222;display:block}
+
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--ink);display:flex;z-index:30;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;color:#8B959D;padding:11px 0 9px;border-radius:0;font-size:12px;letter-spacing:.08em;display:flex;flex-direction:column;align-items:center;gap:2px;position:relative}
+nav button .ic{font-size:18px}
+nav button.on{color:var(--volt);box-shadow:inset 0 3px 0 var(--volt)}
+nav button .badge{position:absolute;top:6px;right:calc(50% - 26px);background:var(--warn);color:#fff;font-size:10px;min-width:17px;padding:1px 4px;border-radius:999px;font-family:'Inter'}
+
+.empty{text-align:center;color:var(--steel);padding:40px 20px;font-size:14px;line-height:1.6}
+.empty .tape{margin-bottom:10px}
+.toast{position:fixed;bottom:86px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;font-size:13.5px;z-index:70;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+.toast.show{opacity:1}
+.nfc-note{font-size:12px;color:var(--steel);margin-top:10px;line-height:1.5}
+.searchbar{display:flex;gap:8px}
+.count{font-size:12px;color:var(--steel);margin:10px 2px}
+.exp{margin-top:20px;background:var(--card);border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.exp .row{margin-top:10px}
+.exp .row+.row{margin-top:8px}
+header{padding-top:calc(14px + env(safe-area-inset-top))}
+.bkp{margin-top:6px;font-size:11px;display:inline-block;padding:2px 8px;border-radius:999px;background:#3A4248;color:#C9D0D5;cursor:pointer}
+.bkp.warn{background:var(--warn);color:#fff}
+.bkp.ok{background:#2E4D3A;color:#BFE3CB}
+/* NFC sheet */
+.nfc-url{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#fff;border:1.5px solid #C6CBCE;border-radius:8px;padding:10px 12px;word-break:break-all;margin-top:8px;user-select:all;-webkit-user-select:all}
+.steps{margin:10px 0 0 18px;font-size:13.5px;line-height:1.55}
+.steps li{margin-bottom:4px}
+.boxhead{display:none;background:var(--card);border-radius:10px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 3px rgba(0,0,0,.08);align-items:center;justify-content:space-between;gap:10px}
+.boxhead.show{display:flex}
+/* desktop: navigare il magazzino dal Mac */
+@media (min-width:1000px){
+  main{max-width:1280px}
+  #results{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:start}
+  #results .card{margin-bottom:0}
+  #results .empty{grid-column:1/-1}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  #v-cap,#v-boxes{max-width:640px;margin:0 auto}
+  #lotSection{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:10px}
+  #lotSection .sect{grid-column:1/-1}
+  #lotSection .lotcard{margin-bottom:0}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="dot"></span>Inventario Officina</h1>
+  <div class="sub">v4 · Rilievo · Lotti · Composizione · Ricerca</div>
+  <span class="bkp" id="bkpBadge" style="display:none"></span>
+</header>
+
+<main>
+
+<!-- ========== 1. SCATTA ========== -->
+<section class="view active" id="v-cap">
+  <div class="capbar">
+    <span class="tape volt">Rilievo</span>
+    <span class="n" id="capCount"></span>
+  </div>
+
+  <div class="seg">
+    <button class="on" id="segSingle">Pezzo singolo</button>
+    <button id="segLot">📸 Foto Lotto</button>
+  </div>
+
+  <!-- single -->
+  <div id="capSingle">
+    <div class="photo-zone" id="photoZone">
+      <span class="cam">📷</span><span>Tocca per scattare</span>
+    </div>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+
+    <label class="f">Descrizione rapida <span style="text-transform:none;font-weight:400">(🎤 detta a voce)</span></label>
+    <div class="row">
+      <textarea id="desc" placeholder="Es. ESC 30A recuperato dal quad 5 pollici"></textarea>
+      <button class="btn-mic" id="micBtn">🎤</button>
+    </div>
+
+    <label class="f">Tag (invio o virgola)</label>
+    <input type="text" id="tagInput" placeholder="esc, motore, m3, compensato…">
+    <div class="chips" id="tagChips"></div>
+
+    <div class="row" style="margin-top:4px">
+      <div>
+        <label class="f">Categoria</label>
+        <select id="catSel">
+          <option>Droni / Elettronica</option><option>Falegnameria</option>
+          <option>Ferramenta</option><option>Utensili</option><option>Vario</option>
+        </select>
+      </div>
+      <div><label class="f">Q.tà</label><input type="number" id="qty" value="1" min="1"></div>
+      <div>
+        <label class="f">Stato</label>
+        <select id="stateSel">
+          <option>Nuovo</option><option>Recupero</option><option>Da testare</option><option>Guasto/ricambi</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="nfc-opt" id="nfcOpt">
+      <div class="sw"></div>
+      <div class="t"><b>Attacca tag NFC al pezzo</b><br><span id="nfcOptSub">Dopo il salvataggio ti chiedo di avvicinare il tag: ci scrivo l'ID e la descrizione base.</span></div>
+    </div>
+
+    <button class="btn-main" id="saveBtn">Salva e passa al prossimo</button>
+  </div>
+
+  <!-- lot -->
+  <div id="capLot" style="display:none">
+    <div class="photo-zone" id="lotZone">
+      <span class="cam">📸</span><span>Fotografa la scatola col contenuto<br>(pezzi separati, luce dall'alto)</span>
+    </div>
+    <input type="file" id="lotInput" accept="image/*" capture="environment" style="display:none">
+
+    <label class="f">Nome del lotto</label>
+    <input type="text" id="lotTitle" placeholder="Es. Fondo scatola viti / Cassetto elettronica">
+
+    <label class="f">Destinazione</label>
+    <select id="lotBoxSel"></select>
+    <input type="text" id="lotNewBox" placeholder="Codice nuova scatola, es. B05" style="margin-top:8px;display:none">
+
+    <div class="nfc-opt" id="lotNfcOpt">
+      <div class="sw"></div>
+      <div class="t"><b>Scrivi tag NFC della scatola</b><br>Dopo il salvataggio scrivo il codice scatola sul tag da attaccare fuori.</div>
+    </div>
+
+    <button class="btn-main" id="saveLotBtn">Salva lotto</button>
+    <div class="hint" style="margin-top:10px">I pezzi li marchi o li ritagli dopo, aprendo il lotto dalla scheda Componi — anche dal divano 🛋️</div>
+  </div>
+</section>
+
+<!-- ========== 2. COMPONI ========== -->
+<section class="view" id="v-comp">
+  <div class="capbar">
+    <span class="tape">Da sistemare</span>
+    <span class="n" id="compCount"></span>
+  </div>
+  <div id="lotSection"></div>
+  <div class="sect" id="looseTitle">Pezzi sciolti</div>
+  <div class="chips" id="compCatFilters"></div>
+  <div class="count" id="compHint" style="margin-top:8px"></div>
+  <div class="grid" id="compGrid" style="margin-top:8px"></div>
+</section>
+
+<!-- ========== 3. CERCA ========== -->
+<section class="view" id="v-search">
+  <div class="searchbar">
+    <input type="text" id="q" placeholder="Cerca pezzo, tag, descrizione…">
+    <button class="btn-volt" id="nfcReadBtn" style="display:none;flex:0 0 auto">NFC</button>
+  </div>
+  <div class="boxhead" id="boxHead"></div>
+  <div class="chips" id="boxFilters" style="margin-top:10px"></div>
+  <div class="chips" id="catFilters" style="margin-top:6px"></div>
+  <div class="count" id="count"></div>
+  <div id="results"></div>
+</section>
+
+<!-- ========== 4. SCATOLE ========== -->
+<section class="view" id="v-boxes">
+  <div id="boxList"></div>
+  <div class="exp">
+    <span class="tape">Archivio e backup</span>
+    <div class="hint" style="margin-top:8px">I dati vivono <b>su questo dispositivo</b>. L'<b>archivio ZIP</b> contiene tutto (dati, foto, elenco leggibile dall'AI): salvalo su iCloud Drive / Google Drive o mandalo al Mac con AirDrop. Sul Mac apri questa stessa app e fai <b>Importa</b> per navigare il magazzino.</div>
+    <div class="row">
+      <button class="btn-volt" id="expZip">Esporta archivio ZIP</button>
+    </div>
+    <div class="row">
+      <button class="btn-ghost" id="expCsv">CSV (Excel)</button>
+      <button class="btn-ghost" id="expJson">Solo dati JSON</button>
+    </div>
+    <div class="row">
+      <button class="btn-ghost" id="impBtn">Importa archivio…</button>
+    </div>
+    <input type="file" id="impInput" accept=".zip,.json,application/zip,application/json" style="display:none">
+    <div class="hint" id="storageInfo" style="margin-top:10px;margin-bottom:0"></div>
+  </div>
+  <div class="nfc-note" id="nfcNote"></div>
+</section>
+
+</main>
+
+<!-- LOT EDITOR -->
+<div class="overlay" id="lotOverlay">
+  <div class="ohead">
+    <button id="lotBack">←</button>
+    <div class="t" id="lotHeadTitle">Lotto</div>
+    <button id="lotNfcBtn" style="font-size:13px;font-family:'Saira Condensed';font-weight:800;background:var(--volt);color:var(--ink);padding:6px 12px;border-radius:6px">NFC</button>
+  </div>
+  <div class="obody">
+    <div class="row" style="align-items:center">
+      <select id="lotEdBox" style="flex:1"></select>
+      <button class="btn-ghost" id="lotDelBtn" style="flex:0 0 auto;border-color:var(--warn);color:var(--warn)">Elimina</button>
+    </div>
+    <div class="modebar">
+      <button id="modeMark">📍 Segna pezzo</button>
+      <button id="modeCrop">✂️ Ritaglia pezzo</button>
+    </div>
+    <div class="hint" id="lotHint">Scegli una modalità: <b>Segna</b> = tocca il pezzo sulla foto, resta nel lotto con foto comune. <b>Ritaglia</b> = trascina un rettangolo, il pezzo diventa autonomo con la sua foto.</div>
+    <div class="lotphoto" id="lotPhotoWrap"><img id="lotImg" alt=""></div>
+    <div class="sect">Pezzi del lotto</div>
+    <div id="lotPieces"></div>
+  </div>
+</div>
+
+<!-- PIECE MODAL -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitle">Nuovo pezzo</h3>
+    <div class="prev" id="modalPrev" style="display:none"><img id="modalPrevImg"></div>
+    <label class="f">Descrizione <span style="text-transform:none;font-weight:400">🎤</span></label>
+    <div class="row">
+      <textarea id="mDesc" placeholder="Es. regolatore step-down 5V"></textarea>
+      <button class="btn-mic" id="mMic">🎤</button>
+    </div>
+    <label class="f">Tag (separati da virgola)</label>
+    <input type="text" id="mTags" placeholder="step-down, 5v, alimentazione">
+    <div class="row" style="margin-top:4px">
+      <div>
+        <label class="f">Categoria</label>
+        <select id="mCat">
+          <option>Droni / Elettronica</option><option>Falegnameria</option>
+          <option>Ferramenta</option><option>Utensili</option><option>Vario</option>
+        </select>
+      </div>
+      <div><label class="f">Q.tà</label><input type="number" id="mQty" value="1" min="1"></div>
+      <div>
+        <label class="f">Stato</label>
+        <select id="mState">
+          <option>Nuovo</option><option>Recupero</option><option>Da testare</option><option>Guasto/ricambi</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn-main" id="mSave">Aggiungi pezzo</button>
+    <button class="btn-ghost" id="mCancel" style="width:100%;margin-top:8px;padding:11px">Annulla</button>
+  </div>
+</div>
+
+<!-- NFC SHEET -->
+<div class="modal-bg" id="nfcBg">
+  <div class="modal">
+    <h3 id="nfcTitle">Tag NFC</h3>
+    <div class="hint" id="nfcSub" style="margin-bottom:0"></div>
+    <div class="nfc-url" id="nfcUrl"></div>
+    <button class="btn-main" id="nfcCopy">Copia link</button>
+    <button class="btn-ghost" id="nfcDirect" style="width:100%;margin-top:8px;padding:11px;display:none">Scrivi direttamente sul tag</button>
+    <ol class="steps" id="nfcSteps">
+      <li>Apri l'app gratuita <b>NFC Tools</b> → <b>Scrivi</b></li>
+      <li><b>Aggiungi un record</b> → <b>URL / URI</b> → incolla il link → OK</li>
+      <li><b>Scrivi</b> e avvicina il tag alla parte alta dell'iPhone</li>
+      <li>Fatto: d'ora in poi basta avvicinare l'iPhone al tag e si apre la scatola qui</li>
+    </ol>
+    <button class="btn-ghost" id="nfcClose" style="width:100%;margin-top:12px;padding:11px">Chiudi</button>
+  </div>
+</div>
+
+<div class="compose-bar" id="composeBar">
+  <div class="inner">
+    <span class="cnt" id="selCnt">0</span>
+    <select id="targetBox"></select>
+    <button class="btn-volt" id="assignBtn" style="flex:0 0 auto">Metti in scatola</button>
+  </div>
+</div>
+
+<nav>
+  <button class="on" data-v="v-cap"><span class="ic">📷</span>Scatta</button>
+  <button data-v="v-comp"><span class="ic">🧩</span>Componi<span class="badge" id="badgeComp" style="display:none"></span></button>
+  <button data-v="v-search"><span class="ic">🔍</span>Cerca</button>
+  <button data-v="v-boxes"><span class="ic">📦</span>Scatole</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= state ================= */
+let index = [];        // items
+let lots = [];         // lots {id,title,box,ts}
+let photoCache = {};
+let curPhoto = null, curLotPhoto = null;
+let curTags = [];
+let editId = null;
+let nfcWanted = false, lotNfcWanted = false;
+let filters = {box:null, cat:null};
+let compSel = new Set();
+let compCatFilter = null;
+let openLotId = null;
+let lotMode = null;            // 'mark' | 'crop'
+let pendingPiece = null;       // {type, marker?, cropB64?}
+
+const $ = id => document.getElementById(id);
+const toast = m => { const t=$('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2400); };
+const esc = s => (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const unassigned = () => index.filter(i=>!i.box);
+const lotById = id => lots.find(l=>l.id===id);
+const lotLights = id => index.filter(i=>i.lotId===id && i.light);
+
+/* ================= storage locale (IndexedDB sul dispositivo) ================= */
+const store = (()=>{ let dbP=null;
+  function db(){ if(!dbP) dbP=new Promise((res,rej)=>{ const r=indexedDB.open('inventario-officina',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('kv');
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); return dbP; }
+  async function tx(mode,fn){ const d=await db(); return new Promise((res,rej)=>{ const t=d.transaction('kv',mode); const q=fn(t.objectStore('kv')); t.oncomplete=()=>res(q.result); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error); }); }
+  return {
+    get: async k => { const v=await tx('readonly',s=>s.get(k)); return v===undefined?null:{value:v}; },
+    set: async (k,v) => { await tx('readwrite',s=>s.put(v,k)); return {key:k}; },
+    delete: async k => { await tx('readwrite',s=>s.delete(k)); return {key:k}; },
+    keys: async () => await tx('readonly',s=>s.getAllKeys()),
+    clear: async () => { await tx('readwrite',s=>s.clear()); }
+  };
+})();
+let meta = {lastChange:0, lastExport:0};
+
+async function loadIndex(){
+  try{
+    const r = await store.get('inventory-index');
+    if(r){ const d = JSON.parse(r.value); index = d.items||[]; lots = d.lots||[]; }
+    const m = await store.get('meta'); if(m) meta = {...meta, ...m.value};
+  }catch(e){ index=[]; lots=[]; }
+  refreshAll(); updateBackupBadge(); handleHash();
+  try{ if(navigator.storage&&navigator.storage.persist) await navigator.storage.persist(); }catch(e){}
+  updateStorageInfo();
+}
+async function saveIndex(){
+  try{
+    await store.set('inventory-index', JSON.stringify({items:index, lots}));
+    meta.lastChange = Date.now(); await store.set('meta', meta); updateBackupBadge();
+  }
+  catch(e){ toast('Errore salvataggio indice'); }
+}
+function updateBackupBadge(){
+  const b=$('bkpBadge'); if(!b) return;
+  if(!index.length && !lots.length){ b.style.display='none'; return; }
+  b.style.display='inline-block';
+  const days = meta.lastExport ? Math.floor((Date.now()-meta.lastExport)/864e5) : null;
+  const pending = meta.lastChange > meta.lastExport;
+  if(!meta.lastExport){ b.className='bkp warn'; b.textContent='⚠ Mai fatto un backup — tocca qui'; }
+  else if(pending && days>=7){ b.className='bkp warn'; b.textContent='⚠ Ultimo backup '+days+' gg fa — tocca qui'; }
+  else if(pending){ b.className='bkp'; b.textContent='Modifiche da salvare · backup '+(days===0?'oggi':days+' gg fa'); }
+  else { b.className='bkp ok'; b.textContent='✓ Backup aggiornato'; }
+}
+async function updateStorageInfo(){
+  const el=$('storageInfo'); if(!el) return;
+  let t='';
+  try{
+    if(navigator.storage&&navigator.storage.estimate){
+      const e=await navigator.storage.estimate();
+      t+='Spazio usato: '+(e.usage/1048576).toFixed(1)+' MB. ';
+    }
+    if(navigator.storage&&navigator.storage.persisted){
+      t+= (await navigator.storage.persisted()) ? 'Archivio protetto dalla pulizia automatica.' : 'Il browser può liberare spazio: fai il backup ZIP regolarmente.';
+    }
+  }catch(e){}
+  el.textContent=t;
+}
+async function getPhoto(id){
+  if(photoCache[id]!==undefined) return photoCache[id];
+  try{ const r = await store.get('photo-'+id); photoCache[id]=r?r.value:null; }
+  catch(e){ photoCache[id]=null; }
+  return photoCache[id];
+}
+function refreshAll(){
+  updateCounters(); renderComp(); renderSearch(); renderBoxes(); refreshTargetBox(); refreshLotBoxSel();
+}
+function updateCounters(){
+  const u = unassigned().length, ul = lots.filter(l=>!l.box).length;
+  $('capCount').textContent = index.length+' pezzi · '+lots.length+' lotti';
+  $('compCount').textContent = u+' pezzi'+(lots.length?' · '+lots.length+' lotti':'');
+  const tot = u+ul, b=$('badgeComp');
+  if(tot>0){ b.style.display='block'; b.textContent=tot; } else b.style.display='none';
+}
+
+/* ================= compress ================= */
+function compress(file, max, q){
+  return new Promise(res=>{
+    const img = new Image();
+    img.onload = ()=>{
+      let w=img.width,h=img.height;
+      if(Math.max(w,h)>max){ const k=max/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      res(c.toDataURL('image/jpeg',q));
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/* ================= segmented ================= */
+$('segSingle').onclick = ()=>{ $('segSingle').classList.add('on'); $('segLot').classList.remove('on'); $('capSingle').style.display='block'; $('capLot').style.display='none'; };
+$('segLot').onclick = ()=>{ $('segLot').classList.add('on'); $('segSingle').classList.remove('on'); $('capLot').style.display='block'; $('capSingle').style.display='none'; };
+
+/* ================= single photo ================= */
+$('photoZone').addEventListener('click', e=>{ if(e.target.classList.contains('photo-x'))return; $('photoInput').click(); });
+$('photoInput').addEventListener('change', async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  curPhoto = await compress(f,700,.62); showPhoto(curPhoto);
+});
+function showPhoto(b64){
+  const z=$('photoZone');
+  if(b64){
+    z.innerHTML='<img src="'+b64+'"><button class="photo-x" type="button">✕</button>';
+    z.querySelector('.photo-x').onclick=ev=>{ ev.stopPropagation(); curPhoto=null; showPhoto(null); $('photoInput').value=''; };
+  }else z.innerHTML='<span class="cam">📷</span><span>Tocca per scattare</span>';
+}
+
+/* ================= lot photo ================= */
+$('lotZone').addEventListener('click', e=>{ if(e.target.classList.contains('photo-x'))return; $('lotInput').click(); });
+$('lotInput').addEventListener('change', async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  curLotPhoto = await compress(f,1100,.68); showLotPhoto(curLotPhoto);
+});
+function showLotPhoto(b64){
+  const z=$('lotZone');
+  if(b64){
+    z.innerHTML='<img src="'+b64+'"><button class="photo-x" type="button">✕</button>';
+    z.querySelector('.photo-x').onclick=ev=>{ ev.stopPropagation(); curLotPhoto=null; showLotPhoto(null); $('lotInput').value=''; };
+  }else z.innerHTML='<span class="cam">📸</span><span>Fotografa la scatola col contenuto<br>(pezzi separati, luce dall\'alto)</span>';
+}
+
+/* ================= voice (shared) ================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec=null, recOn=false, recTarget=null;
+function bindMic(btnId, targetId){
+  $(btnId).onclick = ()=>{
+    if(!SR){ toast('Usa il microfono della tastiera del telefono'); return; }
+    if(recOn){ rec.stop(); return; }
+    recTarget = $(targetId);
+    try{ rec.start(); recOn=true; $(btnId).classList.add('rec'); recBtn=$(btnId); }
+    catch(e){ toast('Dettatura non disponibile'); }
+  };
+}
+let recBtn=null;
+if(SR){
+  rec = new SR(); rec.lang='it-IT'; rec.interimResults=false;
+  rec.onresult = e=>{ const t=e.results[0][0].transcript; if(recTarget) recTarget.value=(recTarget.value?recTarget.value+' ':'')+t; };
+  rec.onend = ()=>{ recOn=false; if(recBtn)recBtn.classList.remove('rec'); };
+  rec.onerror = ()=>{ recOn=false; if(recBtn)recBtn.classList.remove('rec'); toast('Microfono non disponibile qui — usa il mic della tastiera'); };
+}
+bindMic('micBtn','desc');
+bindMic('mMic','mDesc');
+
+/* ================= tags (single form) ================= */
+$('tagInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter'||e.key===','){ e.preventDefault(); addTag($('tagInput').value); $('tagInput').value=''; }
+});
+$('tagInput').addEventListener('blur', ()=>{ if($('tagInput').value.trim()){ addTag($('tagInput').value); $('tagInput').value=''; } });
+function addTag(t){ t=t.replace(/,/g,'').trim().toLowerCase(); if(t&&!curTags.includes(t)){ curTags.push(t); renderTags(); } }
+function renderTags(){
+  $('tagChips').innerHTML = curTags.map((t,i)=>'<span class="chip">'+esc(t)+' <b data-i="'+i+'">✕</b></span>').join('');
+  $('tagChips').querySelectorAll('b').forEach(b=> b.onclick=()=>{ curTags.splice(+b.dataset.i,1); renderTags(); });
+}
+
+/* ================= NFC ================= */
+const nfcOK = 'NDEFReader' in window;
+$('nfcOpt').onclick = ()=>{ nfcWanted=!nfcWanted; $('nfcOpt').classList.toggle('on',nfcWanted); };
+$('lotNfcOpt').onclick = ()=>{ lotNfcWanted=!lotNfcWanted; $('lotNfcOpt').classList.toggle('on',lotNfcWanted); };
+if(!nfcOK) $('nfcOptSub').textContent='Dopo il salvataggio ti preparo il link da scrivere sul tag con NFC Tools.';
+/* Sul tag si scrive un LINK all'app: l'iPhone legge i tag con link anche senza app aperta
+   e apre direttamente la scatola (#b=CODICE) o il pezzo (#p=ID). */
+const appBase = () => location.origin + location.pathname.replace(/index\.html$/,'');
+const boxUrl = b => appBase()+'#b='+encodeURIComponent(b);
+const itemUrl = i => appBase()+'#p='+encodeURIComponent(i.id);
+let nfcPayload='';
+function nfcSheet(title, sub, url){
+  resetSheet(); nfcPayload=url;
+  $('nfcTitle').textContent=title; $('nfcSub').innerHTML=sub; $('nfcUrl').textContent=url;
+  $('nfcDirect').style.display = nfcOK?'block':'none';
+  $('nfcSteps').style.display = nfcOK?'none':'block';
+  if(location.protocol==='file:') $('nfcSub').innerHTML += '<br><b style="color:var(--warn)">Attenzione: app aperta da file locale, il link non funzionerà sul telefono. Usa la versione online.</b>';
+  $('nfcBg').classList.add('show');
+  return Promise.resolve(true);
+}
+$('nfcClose').onclick=()=>$('nfcBg').classList.remove('show');
+$('nfcCopy').onclick=async ()=>{
+  try{ await navigator.clipboard.writeText(nfcPayload); toast('Link copiato ✓ ora incollalo in NFC Tools'); }
+  catch(e){ const r=document.createRange(); r.selectNodeContents($('nfcUrl')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('Tieni premuto sul link → Copia'); }
+};
+$('nfcDirect').onclick=async ()=>{
+  try{ const w=new NDEFReader(); toast('Avvicina il tag NFC…');
+    await w.write({records:[{recordType:'url', data:nfcPayload}]});
+    toast('Tag scritto ✓'); $('nfcBg').classList.remove('show');
+  }catch(e){ toast('Scrittura non riuscita: usa NFC Tools'); }
+};
+const nfcWriteItem = i => nfcSheet('Tag NFC del pezzo', 'Tag da attaccare al pezzo: <b>'+esc((i.desc||'').slice(0,60)||i.id)+'</b>', itemUrl(i));
+const nfcWriteBox = b => nfcSheet('Tag NFC scatola '+b, 'Tag da attaccare fuori dalla scatola <b>'+esc(b)+'</b>. Toccandolo si apre l\'elenco del contenuto.', boxUrl(b));
+
+/* apertura da tag / link: #b=B03 oppure #p=ID */
+function handleHash(){
+  const h=decodeURIComponent(location.hash.slice(1)); if(!h) return;
+  const [k,v]=h.split('=');
+  if(k==='b' && v){
+    filters={box:v.toUpperCase(),cat:null}; $('q').value='';
+    switchView('v-search');
+    if(!allBoxes().includes(v.toUpperCase())) toast('Scatola '+v+' non presente in questo archivio');
+  } else if(k==='p' && v){
+    const it=index.find(x=>x.id===v);
+    filters={box:null,cat:null}; switchView('v-search');
+    if(it){ $('q').value=''; showOnly=v; renderSearch(); }
+    else toast('Pezzo non presente in questo archivio');
+  }
+  history.replaceState(null,'',location.pathname+location.search);
+}
+let showOnly=null;
+window.addEventListener('hashchange', handleHash);
+
+/* ================= boxes helpers ================= */
+function allBoxes(){
+  return [...new Set([...index.filter(i=>i.box).map(i=>i.box), ...lots.filter(l=>l.box).map(l=>l.box)])].sort();
+}
+function refreshLotBoxSel(){
+  const sel=$('lotBoxSel'); const cur=sel.value;
+  sel.innerHTML = '<option value="">⏳ Da sistemare (decido dopo)</option>' +
+    allBoxes().map(b=>'<option>'+esc(b)+'</option>').join('') +
+    '<option value="__new">＋ Nuova scatola…</option>';
+  if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+}
+$('lotBoxSel').addEventListener('change', ()=>{ $('lotNewBox').style.display = $('lotBoxSel').value==='__new'?'block':'none'; });
+
+/* ================= save single ================= */
+$('saveBtn').onclick = async ()=>{
+  const desc=$('desc').value.trim();
+  if(!desc && !curPhoto){ toast('Serve almeno foto o descrizione'); return; }
+  $('saveBtn').disabled=true;
+  const id = editId||uid();
+  const old = editId ? index.find(x=>x.id===id) : null;
+  const item = {
+    id, box: old?old.box:null, cat:$('catSel').value, desc,
+    tags:[...curTags], qty:+$('qty').value||1, state:$('stateSel').value,
+    hasPhoto:!!curPhoto, nfc: old?old.nfc:false,
+    lotId: old?old.lotId:null, light: old?old.light:false, marker: old?old.marker:null,
+    ts: old?old.ts:Date.now()
+  };
+  try{
+    if(curPhoto){ await store.set('photo-'+id,curPhoto); photoCache[id]=curPhoto; if(old&&old.light){item.light=false;item.marker=null;} }
+    else if(editId && old && !old.light){ item.hasPhoto=false; try{await store.delete('photo-'+id);}catch(e){} photoCache[id]=null; }
+    else if(old&&old.light){ item.hasPhoto=false; }
+    if(editId) index=index.map(x=>x.id===id?item:x); else index.unshift(item);
+    if(nfcWanted&&!editId) item.nfc=true;
+    await saveIndex();
+    if(nfcWanted&&!editId) await nfcWriteItem(item);
+    toast(editId?'Aggiornato ✓':'Pezzo rilevato ✓');
+    resetForm(); refreshAll();
+  }catch(e){ toast('Errore di salvataggio'); }
+  $('saveBtn').disabled=false;
+};
+function resetForm(){
+  editId=null; curPhoto=null; curTags=[]; showPhoto(null);
+  $('desc').value=''; $('qty').value=1; renderTags();
+  nfcWanted=false; $('nfcOpt').classList.remove('on');
+  $('saveBtn').textContent='Salva e passa al prossimo';
+  $('photoInput').value='';
+}
+
+/* ================= save lot ================= */
+$('saveLotBtn').onclick = async ()=>{
+  if(!curLotPhoto){ toast('Serve la foto del lotto'); return; }
+  let box = $('lotBoxSel').value;
+  if(box==='__new'){ box=$('lotNewBox').value.trim().toUpperCase(); if(!box){ toast('Indica il codice scatola'); return; } }
+  $('saveLotBtn').disabled=true;
+  const id=uid();
+  const lot={ id, title:$('lotTitle').value.trim()||'Lotto '+new Date().toLocaleDateString('it-IT'), box:box||null, ts:Date.now() };
+  try{
+    await store.set('photo-'+id, curLotPhoto); photoCache[id]=curLotPhoto;
+    lots.unshift(lot);
+    await saveIndex();
+    if(lotNfcWanted && lot.box) await nfcWriteBox(lot.box);
+    else if(lotNfcWanted && !lot.box) toast('NFC: assegna prima una scatola al lotto');
+    toast('Lotto salvato ✓ lavoralo da Componi');
+    curLotPhoto=null; showLotPhoto(null); $('lotTitle').value=''; $('lotInput').value='';
+    lotNfcWanted=false; $('lotNfcOpt').classList.remove('on');
+    refreshAll();
+  }catch(e){ toast('Errore di salvataggio'); }
+  $('saveLotBtn').disabled=false;
+};
+
+/* ================= compose view ================= */
+function renderComp(){
+  // lots section
+  if(lots.length){
+    $('lotSection').innerHTML = '<div class="sect">Lotti fotografati</div>' + lots.map(l=>{
+      const n=index.filter(i=>i.lotId===l.id).length;
+      return `<div class="lotcard" data-id="${l.id}">
+        <div class="th"><div class="ph" data-id="${l.id}"></div></div>
+        <div class="inf">
+          <div class="t">${esc(l.title)}</div>
+          <div class="s">${l.box?'📦 '+esc(l.box):'⏳ da sistemare'} · ${n} pezzi censiti<br>Tocca per marcare o ritagliare</div>
+        </div>
+      </div>`;
+    }).join('');
+    $('lotSection').querySelectorAll('.ph').forEach(async d=>{
+      const b64=await getPhoto(d.dataset.id);
+      if(b64) d.outerHTML='<img src="'+b64+'">';
+    });
+    $('lotSection').querySelectorAll('.lotcard').forEach(c=> c.onclick=()=>openLot(c.dataset.id));
+  } else $('lotSection').innerHTML='';
+
+  // loose pieces (unassigned, not light — light live inside lots/boxes)
+  const loose = unassigned().filter(i=>!i.light).filter(i=>!compCatFilter||i.cat===compCatFilter);
+  const cats=[...new Set(unassigned().filter(i=>!i.light).map(i=>i.cat))];
+  $('compCatFilters').innerHTML = cats.map(c=>'<span class="chip filter mini'+(compCatFilter===c?' on':'')+'" data-c="'+esc(c)+'">'+esc(c)+'</span>').join('');
+  $('compCatFilters').querySelectorAll('.chip').forEach(c=> c.onclick=()=>{ compCatFilter=compCatFilter===c.dataset.c?null:c.dataset.c; renderComp(); });
+
+  const anyLoose = unassigned().filter(i=>!i.light).length>0;
+  $('looseTitle').style.display = (anyLoose||lots.length===0)?'block':'none';
+  if(!anyLoose){
+    $('compHint').textContent='';
+    $('compGrid').innerHTML = lots.length?'' :
+      '<div class="empty" style="grid-column:1/-1"><span class="tape volt">Tutto sistemato</span><br>Scatta pezzi singoli o un Foto Lotto per iniziare.</div>';
+    updateComposeBar(); return;
+  }
+  $('compHint').textContent='Tocca i pezzi da mettere insieme, poi scegli la scatola in basso. Tieni premuto per i dettagli.';
+  $('compGrid').innerHTML = loose.map(i=>`
+    <div class="cell${compSel.has(i.id)?' sel':''}" data-id="${i.id}">
+      ${i.nfc?'<span class="nfcb">NFC</span>':''}
+      ${i.hasPhoto?'<div class="ph" data-id="'+i.id+'"></div>':'<div class="nop">📦</div>'}
+      <div class="lbl">${esc(i.desc)||esc(i.cat)}</div>
+    </div>`).join('');
+  $('compGrid').querySelectorAll('.ph').forEach(async d=>{
+    const b64=await getPhoto(d.dataset.id);
+    if(b64) d.outerHTML='<img src="'+b64+'">';
+  });
+  $('compGrid').querySelectorAll('.cell').forEach(c=>{
+    let timer=null, held=false; const id=c.dataset.id;
+    c.addEventListener('touchstart',()=>{held=false;timer=setTimeout(()=>{held=true;showDetail(id);},550);},{passive:true});
+    c.addEventListener('touchend',()=>clearTimeout(timer));
+    c.addEventListener('touchmove',()=>clearTimeout(timer),{passive:true});
+    c.onclick=()=>{ if(held){held=false;return;} toggleSel(id); };
+  });
+  updateComposeBar();
+}
+function toggleSel(id){
+  compSel.has(id)?compSel.delete(id):compSel.add(id);
+  const c=document.querySelector('.cell[data-id="'+id+'"]');
+  if(c)c.classList.toggle('sel',compSel.has(id));
+  updateComposeBar();
+}
+function showDetail(id){
+  const i=index.find(x=>x.id===id); if(!i)return;
+  alert((i.desc||'(senza descrizione)')+'\n\nCategoria: '+i.cat+'\nQ.tà: '+i.qty+'\nStato: '+i.state+'\nTag: '+(i.tags.join(', ')||'—')+(i.nfc?'\nTag NFC associato':''));
+}
+function updateComposeBar(){
+  const on = compSel.size>0 && $('v-comp').classList.contains('active');
+  $('composeBar').classList.toggle('show',on);
+  $('selCnt').textContent=compSel.size;
+}
+function refreshTargetBox(){
+  const boxes=allBoxes();
+  $('targetBox').innerHTML = boxes.map(b=>'<option>'+esc(b)+'</option>').join('')+'<option value="__new">＋ Nuova scatola…</option>';
+  if(boxes.length===0)$('targetBox').value='__new';
+}
+$('assignBtn').onclick = async ()=>{
+  let box=$('targetBox').value;
+  if(box==='__new'){ box=(prompt('Codice nuova scatola (es. B04):')||'').trim().toUpperCase(); if(!box)return; }
+  index=index.map(i=> compSel.has(i.id)?{...i,box}:i);
+  await saveIndex();
+  toast(compSel.size+' pezzi → '+box+' ✓');
+  compSel.clear(); refreshAll();
+};
+
+/* ================= LOT EDITOR ================= */
+async function openLot(id){
+  openLotId=id; lotMode=null;
+  const l=lotById(id); if(!l)return;
+  $('lotHeadTitle').textContent=l.title;
+  const boxes=allBoxes();
+  $('lotEdBox').innerHTML='<option value="">⏳ Da sistemare</option>'+boxes.map(b=>'<option'+(l.box===b?' selected':'')+'>'+esc(b)+'</option>').join('')+'<option value="__new">＋ Nuova scatola…</option>';
+  $('modeMark').classList.remove('on'); $('modeCrop').classList.remove('on');
+  const b64=await getPhoto(id);
+  $('lotImg').src=b64||'';
+  $('lotOverlay').classList.add('show');
+  renderLotMarkers(); renderLotPieces();
+}
+$('lotBack').onclick=()=>{ $('lotOverlay').classList.remove('show'); openLotId=null; refreshAll(); };
+$('lotEdBox').addEventListener('change', async ()=>{
+  let v=$('lotEdBox').value;
+  if(v==='__new'){ v=(prompt('Codice nuova scatola (es. B05):')||'').trim().toUpperCase(); if(!v){ $('lotEdBox').value=lotById(openLotId).box||''; return; } }
+  const l=lotById(openLotId); l.box=v||null;
+  // light pieces follow the lot
+  index=index.map(i=> (i.lotId===openLotId&&i.light)?{...i,box:l.box}:i);
+  await saveIndex();
+  toast(v?('Lotto → '+v+' ✓ (pezzi marcati inclusi)'):'Lotto rimesso da sistemare');
+  openLot(openLotId);
+});
+$('lotNfcBtn').onclick=()=>{
+  const l=lotById(openLotId);
+  if(l.box) nfcWriteBox(l.box);
+  else toast('Assegna prima una scatola al lotto');
+};
+$('lotDelBtn').onclick=async ()=>{
+  const nl=lotLights(openLotId).length;
+  if(!confirm('Eliminare il lotto e la sua foto?'+(nl?'\nATTENZIONE: verranno eliminati anche i '+nl+' pezzi marcati sulla foto.':''))) return;
+  const id=openLotId;
+  index=index.filter(i=>!(i.lotId===id&&i.light));
+  lots=lots.filter(l=>l.id!==id);
+  try{ await store.delete('photo-'+id); }catch(e){}
+  await saveIndex();
+  $('lotOverlay').classList.remove('show'); openLotId=null;
+  toast('Lotto eliminato'); refreshAll();
+};
+$('modeMark').onclick=()=>{ lotMode=lotMode==='mark'?null:'mark'; syncMode(); };
+$('modeCrop').onclick=()=>{ lotMode=lotMode==='crop'?null:'crop'; syncMode(); };
+function syncMode(){
+  $('modeMark').classList.toggle('on',lotMode==='mark');
+  $('modeCrop').classList.toggle('on',lotMode==='crop');
+  $('lotPhotoWrap').classList.toggle('gesture',!!lotMode);
+  $('lotHint').innerHTML = lotMode==='mark' ? '<b>Tocca il pezzo sulla foto</b> per piazzare il marcatore numerato.'
+    : lotMode==='crop' ? '<b>Trascina un rettangolo</b> attorno al pezzo: diventerà la sua foto personale.'
+    : 'Scegli una modalità: <b>Segna</b> = tocca il pezzo sulla foto, resta nel lotto con foto comune. <b>Ritaglia</b> = trascina un rettangolo, il pezzo diventa autonomo con la sua foto.';
+}
+function renderLotMarkers(){
+  $('lotPhotoWrap').querySelectorAll('.mdot,.cropbox').forEach(e=>e.remove());
+  lotLights(openLotId).forEach((i,n)=>{
+    const d=document.createElement('div');
+    d.className='mdot'; d.textContent=n+1;
+    d.style.left=(i.marker.x*100)+'%'; d.style.top=(i.marker.y*100)+'%';
+    $('lotPhotoWrap').appendChild(d);
+  });
+}
+function renderLotPieces(){
+  const pieces=index.filter(i=>i.lotId===openLotId);
+  const lightsOrder=lotLights(openLotId);
+  $('lotPieces').innerHTML = pieces.length? pieces.map(i=>{
+    const n=i.light?(lightsOrder.indexOf(i)+1):null;
+    return `<div class="piece-li">
+      <span class="num${i.light?'':' cut'}">${i.light?n:'✂'}</span>
+      <span class="d">${esc(i.desc)||'(senza descrizione)'} · ×${i.qty}</span>
+      <button class="btn-ghost del" data-id="${i.id}" style="border-color:var(--warn);color:var(--warn)">✕</button>
+    </div>`;
+  }).join('') : '<div class="hint">Nessun pezzo ancora censito in questo lotto.</div>';
+  $('lotPieces').querySelectorAll('.del').forEach(b=> b.onclick=async ()=>{
+    if(!confirm('Eliminare questo pezzo?'))return;
+    const it=index.find(x=>x.id===b.dataset.id);
+    index=index.filter(x=>x.id!==b.dataset.id);
+    if(it&&it.hasPhoto){ try{await store.delete('photo-'+it.id);}catch(e){} }
+    await saveIndex(); renderLotMarkers(); renderLotPieces(); updateCounters();
+  });
+}
+
+/* gestures on lot photo */
+let drag=null, cropEl=null;
+const wrap=$('lotPhotoWrap');
+wrap.addEventListener('pointerdown', e=>{
+  if(!lotMode||!openLotId) return;
+  const r=wrap.getBoundingClientRect();
+  const x=(e.clientX-r.left)/r.width, y=(e.clientY-r.top)/r.height;
+  if(lotMode==='mark'){
+    pendingPiece={type:'marker', marker:{x:Math.min(Math.max(x,0),1), y:Math.min(Math.max(y,0),1)}};
+    openModal();
+    return;
+  }
+  // crop
+  drag={x0:e.clientX-r.left, y0:e.clientY-r.top, r};
+  cropEl=document.createElement('div'); cropEl.className='cropbox';
+  wrap.appendChild(cropEl);
+  wrap.setPointerCapture(e.pointerId);
+});
+wrap.addEventListener('pointermove', e=>{
+  if(!drag||!cropEl) return;
+  const x=e.clientX-drag.r.left, y=e.clientY-drag.r.top;
+  const l=Math.min(drag.x0,x), t=Math.min(drag.y0,y);
+  cropEl.style.left=l+'px'; cropEl.style.top=t+'px';
+  cropEl.style.width=Math.abs(x-drag.x0)+'px'; cropEl.style.height=Math.abs(y-drag.y0)+'px';
+});
+wrap.addEventListener('pointerup', async e=>{
+  if(!drag||!cropEl) return;
+  const x=e.clientX-drag.r.left, y=e.clientY-drag.r.top;
+  const l=Math.min(drag.x0,x), t=Math.min(drag.y0,y);
+  const w=Math.abs(x-drag.x0), h=Math.abs(y-drag.y0);
+  const R=drag.r; drag=null;
+  if(w<20||h<20){ cropEl.remove(); cropEl=null; return; }
+  // crop from natural image
+  const img=$('lotImg');
+  const kx=img.naturalWidth/R.width, ky=img.naturalHeight/R.height;
+  const c=document.createElement('canvas');
+  c.width=Math.round(w*kx); c.height=Math.round(h*ky);
+  c.getContext('2d').drawImage(img, Math.round(l*kx), Math.round(t*ky), c.width, c.height, 0,0,c.width,c.height);
+  pendingPiece={type:'crop', cropB64:c.toDataURL('image/jpeg',.72)};
+  cropEl.remove(); cropEl=null;
+  openModal(pendingPiece.cropB64);
+});
+
+/* piece modal */
+function openModal(previewB64){
+  $('modalTitle').textContent = pendingPiece.type==='marker'?'Pezzo segnato sulla foto':'Pezzo ritagliato';
+  if(previewB64){ $('modalPrev').style.display='block'; $('modalPrevImg').src=previewB64; }
+  else $('modalPrev').style.display='none';
+  $('mDesc').value=''; $('mTags').value=''; $('mQty').value=1;
+  $('modalBg').classList.add('show');
+  setTimeout(()=>$('mDesc').focus(),100);
+}
+$('mCancel').onclick=()=>{ pendingPiece=null; $('modalBg').classList.remove('show'); };
+$('mSave').onclick=async ()=>{
+  if(!pendingPiece||!openLotId) return;
+  const l=lotById(openLotId);
+  const id=uid();
+  const item={
+    id, lotId:openLotId,
+    cat:$('mCat').value, desc:$('mDesc').value.trim(),
+    tags:$('mTags').value.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean),
+    qty:+$('mQty').value||1, state:$('mState').value,
+    nfc:false, ts:Date.now()
+  };
+  try{
+    if(pendingPiece.type==='marker'){
+      item.light=true; item.marker=pendingPiece.marker; item.hasPhoto=false;
+      item.box=l.box||null;                       // segue il lotto
+    }else{
+      item.light=false; item.marker=null; item.hasPhoto=true;
+      item.box=null;                              // autonomo → componi
+      await store.set('photo-'+id, pendingPiece.cropB64);
+      photoCache[id]=pendingPiece.cropB64;
+    }
+    index.unshift(item);
+    await saveIndex();
+    toast(pendingPiece.type==='marker'?'Pezzo segnato ✓':'Pezzo ritagliato ✓ lo trovi tra i pezzi sciolti');
+    pendingPiece=null; $('modalBg').classList.remove('show');
+    renderLotMarkers(); renderLotPieces(); updateCounters();
+  }catch(e){ toast('Errore di salvataggio'); }
+};
+
+/* ================= search ================= */
+$('q').addEventListener('input', ()=>{ showOnly=null; renderSearch(); });
+function renderSearch(){
+  const hasUn=unassigned().length>0;
+  $('boxFilters').innerHTML =
+    (hasUn?'<span class="chip filter'+(filters.box==='__none'?' on':'')+'" data-b="__none">⏳ Da sistemare</span>':'')+
+    allBoxes().map(b=>'<span class="chip filter'+(filters.box===b?' on':'')+'" data-b="'+esc(b)+'">📦 '+esc(b)+'</span>').join('');
+  $('boxFilters').querySelectorAll('.chip').forEach(c=> c.onclick=()=>{ showOnly=null; filters.box=filters.box===c.dataset.b?null:c.dataset.b; renderSearch(); });
+  const cats=[...new Set(index.map(i=>i.cat))];
+  $('catFilters').innerHTML = cats.map(c=>'<span class="chip filter mini'+(filters.cat===c?' on':'')+'" data-c="'+esc(c)+'">'+esc(c)+'</span>').join('');
+  $('catFilters').querySelectorAll('.chip').forEach(c=> c.onclick=()=>{ showOnly=null; filters.cat=filters.cat===c.dataset.c?null:c.dataset.c; renderSearch(); });
+
+  // intestazione scatola (aperta da tag NFC o da filtro)
+  const bh=$('boxHead');
+  if(filters.box && filters.box!=='__none'){
+    const n=index.filter(i=>i.box===filters.box).length, pz=index.filter(i=>i.box===filters.box).reduce((s,i)=>s+(+i.qty||0),0);
+    bh.innerHTML='<div><span class="tape volt">'+esc(filters.box)+'</span><div class="n" style="margin-top:6px;font-size:12px;color:var(--steel)">'+n+' voci · '+pz+' pezzi</div></div><div style="display:flex;gap:8px"><button class="btn-ghost" id="bhNfc">NFC</button><button class="btn-ghost" id="bhAll">Tutto</button></div>';
+    bh.classList.add('show');
+    $('bhNfc').onclick=()=>nfcWriteBox(filters.box);
+    $('bhAll').onclick=()=>{ filters.box=null; renderSearch(); };
+  } else { bh.classList.remove('show'); bh.innerHTML=''; }
+
+  const q=$('q').value.trim().toLowerCase();
+  let res=index.filter(i=>{
+    if(showOnly) return i.id===showOnly;
+    if(filters.box==='__none'&&i.box) return false;
+    if(filters.box&&filters.box!=='__none'&&i.box!==filters.box) return false;
+    if(filters.cat&&i.cat!==filters.cat) return false;
+    if(!q) return true;
+    const lt=i.lotId?(lotById(i.lotId)?.title||''):'';
+    return (i.desc+' '+i.tags.join(' ')+' '+(i.box||'')+' '+i.cat+' '+lt).toLowerCase().includes(q);
+  });
+  $('count').textContent = index.length===0?'':res.length+' pezzi trovati su '+index.length;
+
+  if(index.length===0){
+    $('results').innerHTML='<div class="empty"><span class="tape">Magazzino vuoto</span><br>Inizia il rilievo dalla scheda 📷</div>';
+    return;
+  }
+  $('results').innerHTML = res.map(i=>{
+    let photoHtml='';
+    if(i.hasPhoto) photoHtml='<div class="ph" data-id="'+i.id+'"></div>';
+    else if(i.light&&i.lotId) photoHtml='<div class="lph" data-lot="'+i.lotId+'" data-x="'+i.marker.x+'" data-y="'+i.marker.y+'"></div>';
+    const lt=i.lotId?lotById(i.lotId):null;
+    return `<div class="card">
+      ${photoHtml}
+      <div class="body">
+        <div class="top">
+          ${i.box?'<span class="tape">'+esc(i.box)+'</span>':'<span class="tape grey">Da sistemare</span>'}
+          <span class="qty">×${i.qty}</span>
+        </div>
+        <div class="desc">${esc(i.desc)||'<i>senza descrizione</i>'}</div>
+        <div class="chips" style="margin-top:8px">${i.tags.map(t=>'<span class="chip mini">'+esc(t)+'</span>').join('')}${i.nfc?'<span class="chip mini" style="background:var(--volt);border-color:var(--volt)">NFC</span>':''}${lt?'<span class="chip mini" style="border-style:dashed">📸 '+esc(lt.title)+'</span>':''}</div>
+        <div class="meta"><span>${esc(i.cat)}</span><span class="state-pill">${esc(i.state)}</span><span>${new Date(i.ts).toLocaleDateString('it-IT')}</span></div>
+      </div>
+      <div class="acts">
+        <button class="btn-ghost e" data-id="${i.id}">Modifica</button>
+        <button class="btn-ghost m" data-id="${i.id}">Sposta</button>
+        <button class="btn-ghost n" data-id="${i.id}">NFC</button>
+        <button class="btn-ghost d" data-id="${i.id}" style="border-color:var(--warn);color:var(--warn)">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+  $('results').querySelectorAll('.ph').forEach(async d=>{
+    const b64=await getPhoto(d.dataset.id);
+    if(b64) d.outerHTML='<img src="'+b64+'" loading="lazy">';
+  });
+  $('results').querySelectorAll('.lph').forEach(async d=>{
+    const b64=await getPhoto(d.dataset.lot);
+    if(b64) d.outerHTML='<div class="mwrap"><img src="'+b64+'" loading="lazy"><div class="mdot hi" style="left:'+(d.dataset.x*100)+'%;top:'+(d.dataset.y*100)+'%">●</div></div>';
+  });
+  $('results').querySelectorAll('.e').forEach(b=> b.onclick=()=>editItem(b.dataset.id));
+  $('results').querySelectorAll('.d').forEach(b=> b.onclick=()=>delItem(b.dataset.id));
+  $('results').querySelectorAll('.m').forEach(b=> b.onclick=()=>moveItem(b.dataset.id));
+  $('results').querySelectorAll('.n').forEach(b=> b.onclick=async ()=>{
+    const i=index.find(x=>x.id===b.dataset.id); if(!i)return;
+    await nfcWriteItem(i);
+    if(!i.nfc){ i.nfc=true; await saveIndex(); renderSearch(); }
+  });
+}
+async function moveItem(id){
+  const box=(prompt('Sposta in scatola (vuoto = torna in "da sistemare"):')||'').trim().toUpperCase();
+  index=index.map(i=> i.id===id?{...i,box:box||null}:i);
+  await saveIndex(); refreshAll();
+  toast(box?'Spostato in '+box:'Rimesso tra i pezzi da sistemare');
+}
+async function editItem(id){
+  const i=index.find(x=>x.id===id); if(!i)return;
+  editId=id; curTags=[...i.tags];
+  $('catSel').value=i.cat; $('desc').value=i.desc; $('qty').value=i.qty; $('stateSel').value=i.state;
+  renderTags();
+  curPhoto=i.hasPhoto?await getPhoto(id):null;
+  showPhoto(curPhoto);
+  $('saveBtn').textContent='Aggiorna pezzo';
+  $('segSingle').click();
+  switchView('v-cap'); window.scrollTo(0,0);
+}
+async function delItem(id){
+  if(!confirm('Eliminare questo pezzo?'))return;
+  const it=index.find(x=>x.id===id);
+  index=index.filter(x=>x.id!==id);
+  if(it&&it.hasPhoto){ try{await store.delete('photo-'+id);}catch(e){} }
+  await saveIndex(); refreshAll();
+  toast('Eliminato');
+}
+
+/* NFC read (search) */
+if(nfcOK){
+  $('nfcReadBtn').style.display='block';
+  $('nfcReadBtn').onclick=async ()=>{
+    try{
+      const r=new NDEFReader();
+      await r.scan();
+      toast('Avvicina il tag NFC…');
+      r.onreading=ev=>{
+        for(const rc of ev.message.records){
+          if(rc.recordType==='url'){
+            const u=new TextDecoder().decode(rc.data); const i=u.indexOf('#');
+            if(i>=0){ location.hash=u.slice(i); return; }
+            continue;
+          }
+          if(rc.recordType!=='text')continue;
+          const txt=new TextDecoder(rc.encoding||'utf-8').decode(rc.data).trim();
+          if(txt.startsWith('PZ:')){
+            const id=txt.slice(3).split('|')[0];
+            const it=index.find(x=>x.id===id);
+            if(it){ filters={box:null,cat:null}; $('q').value=it.desc.slice(0,20); renderSearch(); toast('Pezzo trovato ✓'); }
+            else toast('Pezzo non in archivio');
+          }else{
+            const code=txt.toUpperCase();
+            if(allBoxes().includes(code)){ filters.box=code; $('q').value=''; renderSearch(); toast('Scatola '+code+' ✓'); }
+            else { $('q').value=txt; renderSearch(); }
+          }
+        }
+      };
+    }catch(e){ toast('NFC bloccato qui: leggi il tag con NFC Tools'); }
+  };
+}else{
+  $('nfcNote').innerHTML='<b>Tag NFC su iPhone:</b> premi <b>NFC</b> su una scatola, copia il link e scrivilo sul tag con l\'app gratuita <b>NFC Tools</b> (record URL). Poi basta avvicinare l\'iPhone sbloccato al tag: appare la notifica, la tocchi e si apre la scatola qui. Per ritrovare i dati, usa l\'app <b>sempre da Safari</b> (vedi istruzioni nel README).';
+}
+
+/* ================= boxes ================= */
+function renderBoxes(){
+  const boxes=allBoxes();
+  const un=unassigned().filter(i=>!i.light).length, unl=lots.filter(l=>!l.box).length;
+  let html='';
+  if(un+unl>0){
+    html+=`<div class="boxrow"><div><span class="tape grey">Da sistemare</span><div class="n" style="margin-top:6px">${un} pezzi${unl?' · '+unl+' lotti':''} in attesa</div></div>
+      <button class="btn-volt goComp">Componi</button></div>`;
+  }
+  html+=boxes.map(b=>{
+    const n=index.filter(i=>i.box===b).length;
+    const nl=lots.filter(l=>l.box===b).length;
+    return `<div class="boxrow">
+      <div><span class="tape volt">${esc(b)}</span><div class="n" style="margin-top:6px">${n} pezzi${nl?' · '+nl+' foto lotto':''}</div></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost w" data-b="${esc(b)}">NFC</button>
+        <button class="btn-volt o" data-b="${esc(b)}">Apri</button>
+      </div>
+    </div>`;
+  }).join('');
+  if(!html) html='<div class="empty"><span class="tape">Nessuna scatola</span><br>Prima il rilievo fotografico, poi componi le scatole</div>';
+  $('boxList').innerHTML=html;
+  $('boxList').querySelectorAll('.o').forEach(x=> x.onclick=()=>{ filters.box=x.dataset.b; $('q').value=''; switchView('v-search'); renderSearch(); });
+  $('boxList').querySelectorAll('.w').forEach(x=> x.onclick=()=>nfcWriteBox(x.dataset.b));
+  const g=$('boxList').querySelector('.goComp'); if(g)g.onclick=()=>switchView('v-comp');
+}
+
+/* ================= export ================= */
+function download(name, mime, content){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type:mime}));
+  a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+const today = () => new Date().toISOString().slice(0,10);
+const itemPhotoPath = i => i.hasPhoto ? 'foto/pezzi/'+i.id+'.jpg' : null;
+const lotPhotoPath = id => 'foto/lotti/'+id+'.jpg';
+function buildCsv(){
+  const rows=[['Codice','Scatola','Categoria','Descrizione','Tag','Quantita','Stato','Lotto','Foto','NFC','Data']];
+  index.forEach(i=>{
+    const lt=i.lotId?(lotById(i.lotId)?.title||''):'';
+    const ph=itemPhotoPath(i)||(i.light&&i.lotId?lotPhotoPath(i.lotId):'');
+    rows.push([i.id, i.box||'DA SISTEMARE', i.cat, i.desc, i.tags.join(', '), i.qty, i.state, lt, ph, i.nfc?'SI':'', new Date(i.ts).toLocaleDateString('it-IT')]);
+  });
+  return '\uFEFF'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+}
+function buildJson(){
+  const boxes=allBoxes().map(b=>({code:b, items:index.filter(i=>i.box===b).length, lots:lots.filter(l=>l.box===b).map(l=>l.id), nfcUrl:boxUrl(b)}));
+  return {
+    app:'inventario-officina', schema:2, exported:new Date().toISOString(), appUrl:appBase(),
+    counts:{items:index.length, pieces:index.reduce((s,i)=>s+(+i.qty||0),0), boxes:boxes.length, lots:lots.length, unassigned:unassigned().length},
+    boxes,
+    lots: lots.map(l=>({...l, photo:lotPhotoPath(l.id)})),
+    items: index.map(i=>({...i, photo:itemPhotoPath(i), lotPhoto: i.lotId?lotPhotoPath(i.lotId):null}))
+  };
+}
+function buildMarkdown(){
+  const d=new Date().toLocaleDateString('it-IT');
+  const row=i=>{
+    const lt=i.lotId?lotById(i.lotId):null;
+    const ph=itemPhotoPath(i)||(i.light&&lt?lotPhotoPath(lt.id)+' (punto '+Math.round(i.marker.x*100)+'%,'+Math.round(i.marker.y*100)+'%)':'');
+    const c=s=>String(s||'').replace(/\|/g,'/').replace(/\n/g,' ');
+    return '| '+c(i.desc||'(senza descrizione)')+' | '+i.qty+' | '+c(i.state)+' | '+c(i.cat)+' | '+c(i.tags.join(', '))+' | '+c(lt?lt.title:'')+' | '+ph+' | '+i.id+' |';
+  };
+  const head='| Descrizione | Q.t\u00E0 | Stato | Categoria | Tag | Lotto | Foto | ID |\n|---|---|---|---|---|---|---|---|';
+  let md='# Inventario Officina\n\nExport del '+d+' \u00B7 '+index.length+' voci \u00B7 '+index.reduce((s,i)=>s+(+i.qty||0),0)+' pezzi \u00B7 '+allBoxes().length+' scatole \u00B7 '+lots.length+' foto lotto\n\n';
+  allBoxes().forEach(b=>{
+    const its=index.filter(i=>i.box===b);
+    md+='## Scatola '+b+'\n\n';
+    const bl=lots.filter(l=>l.box===b); if(bl.length) md+='Foto lotto: '+bl.map(l=>l.title+' ('+lotPhotoPath(l.id)+')').join(', ')+'\n\n';
+    md+= its.length ? head+'\n'+its.map(row).join('\n')+'\n\n' : '_Nessun pezzo censito_\n\n';
+  });
+  const un=unassigned();
+  if(un.length) md+='## Da sistemare (senza scatola)\n\n'+head+'\n'+un.map(row).join('\n')+'\n\n';
+  return md;
+}
+const README_AI = `# Archivio Inventario Officina \u2014 come leggerlo
+
+Questo ZIP \u00E8 l'export completo dell'app Inventario Officina (dati creati sul telefono).
+
+## File
+- **inventario.md** \u2014 elenco leggibile, raggruppato per scatola. \u00C8 il file pi\u00F9 comodo da dare a un'AI.
+- **inventario.json** \u2014 database completo (schema sotto). Da usare per analisi o per reimportare nell'app.
+- **inventario.csv** \u2014 per Excel / Fogli (separatore ;).
+- **foto/pezzi/ID.jpg** \u2014 foto del singolo pezzo.
+- **foto/lotti/ID.jpg** \u2014 foto di una scatola/lotto con pi\u00F9 pezzi; i pezzi "segnati" hanno un marker con coordinate relative (x,y da 0 a 1) su questa foto.
+
+## Schema inventario.json
+- items[]: id, box (codice scatola, null = da sistemare), cat, desc, tags[], qty, state (Nuovo / Recupero / Da testare / Guasto/ricambi), hasPhoto, photo (percorso), lotId, lotPhoto, light (true = pezzo segnato sulla foto lotto, senza foto propria), marker {x,y}, nfc, ts (ms epoch)
+- lots[]: id, title, box, ts, photo
+- boxes[]: code, items (n. voci), lots, nfcUrl (link scritto sul tag NFC della scatola)
+
+## Domande tipo da fare all'AI
+- "Ho ancora una batteria 4S? In che scatola?"
+- "Cosa mi serve comprare per un drone 5 pollici, considerando quello che ho?"
+- "Guarda le foto dei lotti e dimmi se ci sono pezzi non ancora censiti."
+- "Proponi una riorganizzazione delle scatole per categoria."
+
+## Reimportare
+Apri l'app (stesso indirizzo web) \u2192 scheda Scatole \u2192 Importa archivio \u2192 scegli questo ZIP.
+`;
+async function buildZip(){
+  if(!window.JSZip){ toast('Componente ZIP non caricato: ricarica la pagina'); return null; }
+  const z=new JSZip();
+  z.file('LEGGIMI.md', README_AI);
+  z.file('inventario.md', buildMarkdown());
+  z.file('inventario.json', JSON.stringify(buildJson(),null,1));
+  z.file('inventario.csv', buildCsv());
+  const b64 = s => s.slice(s.indexOf(',')+1);
+  let nf=0;
+  for(const i of index){ if(i.hasPhoto){ const p=await getPhoto(i.id); if(p){ z.file(itemPhotoPath(i), b64(p), {base64:true}); nf++; } } }
+  for(const l of lots){ const p=await getPhoto(l.id); if(p){ z.file(lotPhotoPath(l.id), b64(p), {base64:true}); nf++; } }
+  const blob = await z.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+  return {blob, nf};
+}
+let readyFile=null;
+async function markExported(){ meta.lastExport=Date.now(); await store.set('meta',meta); updateBackupBadge(); }
+$('expZip').onclick=async ()=>{
+  if(!index.length && !lots.length){ toast('Archivio vuoto'); return; }
+  $('expZip').disabled=true; $('expZip').textContent='Preparo lo ZIP\u2026';
+  try{
+    const r=await buildZip(); if(!r) return;
+    const name='inventario-officina-'+today()+'.zip';
+    readyFile=new File([r.blob], name, {type:'application/zip'});
+    // la condivisione richiede un tocco "fresco": la offro in un foglio
+    nfcPayload='';
+    $('nfcTitle').textContent='Archivio pronto';
+    $('nfcSub').innerHTML=index.length+' voci, '+r.nf+' foto \u00B7 '+(r.blob.size/1048576).toFixed(1)+' MB<br>Su iPhone: <b>Condividi \u2192 Salva su File</b> (iCloud Drive o Google Drive) oppure <b>AirDrop</b> al Mac.';
+    $('nfcUrl').textContent=name;
+    $('nfcCopy').textContent='Condividi / Salva\u2026';
+    $('nfcDirect').style.display='block'; $('nfcDirect').textContent='Scarica il file';
+    $('nfcSteps').style.display='none';
+    $('nfcBg').classList.add('show'); $('nfcBg').dataset.mode='zip';
+  }catch(e){ toast('Errore creazione ZIP'); console.error(e); }
+  finally{ $('expZip').disabled=false; $('expZip').textContent='Esporta archivio ZIP'; }
+};
+// i pulsanti del foglio cambiano ruolo in modalit\u00E0 "zip"
+const _copy=$('nfcCopy').onclick, _direct=$('nfcDirect').onclick;
+function resetSheet(){ $('nfcBg').dataset.mode=''; $('nfcCopy').textContent='Copia link'; $('nfcDirect').textContent='Scrivi direttamente sul tag'; }
+$('nfcCopy').onclick=async ()=>{
+  if($('nfcBg').dataset.mode!=='zip') return _copy();
+  try{
+    if(navigator.canShare && navigator.canShare({files:[readyFile]})){
+      await navigator.share({files:[readyFile], title:readyFile.name});
+      await markExported(); toast('Backup condiviso \u2713');
+      $('nfcBg').classList.remove('show'); resetSheet(); return;
+    }
+  }catch(e){ if(e.name==='AbortError') return; }
+  download(readyFile.name,'application/zip',readyFile); await markExported();
+  toast('ZIP scaricato \u2713'); $('nfcBg').classList.remove('show'); resetSheet();
+};
+$('nfcDirect').onclick=async ()=>{
+  if($('nfcBg').dataset.mode!=='zip') return _direct();
+  download(readyFile.name,'application/zip',readyFile); await markExported();
+  toast('ZIP scaricato \u2713'); $('nfcBg').classList.remove('show'); resetSheet();
+};
+$('nfcClose').onclick=()=>{ $('nfcBg').classList.remove('show'); resetSheet(); };
+$('bkpBadge').onclick=()=>{ switchView('v-boxes'); setTimeout(()=>$('expZip').scrollIntoView({behavior:'smooth',block:'center'}),50); };
+
+$('expCsv').onclick=()=>{
+  download('inventario-officina-'+today()+'.csv','text/csv;charset=utf-8',buildCsv());
+  toast('CSV scaricato');
+};
+$('expJson').onclick=()=>{
+  download('inventario-officina-'+today()+'.json','application/json',JSON.stringify(buildJson(),null,1));
+  toast('JSON scaricato (senza foto)');
+};
+
+/* ================= import ================= */
+$('impBtn').onclick=()=>$('impInput').click();
+$('impInput').addEventListener('change', async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    let data, photos={};
+    if(/\.zip$/i.test(f.name) || f.type.includes('zip')){
+      if(!window.JSZip){ toast('Componente ZIP non caricato'); return; }
+      const z=await JSZip.loadAsync(f);
+      const jf=z.file(/(^|\/)inventario\.json$/)[0];
+      if(!jf){ toast('Nello ZIP manca inventario.json'); return; }
+      data=JSON.parse(await jf.async('string'));
+      const base=jf.name.slice(0,jf.name.length-'inventario.json'.length);
+      for(const fe of z.file(/foto\/(pezzi|lotti)\/[^/]+\.jpg$/)){
+        if(!fe.name.startsWith(base)) continue;
+        const id=fe.name.split('/').pop().replace(/\.jpg$/,'');
+        photos[id]='data:image/jpeg;base64,'+await fe.async('base64');
+      }
+    } else {
+      data=JSON.parse(await f.text());
+      if(data.photos) photos=data.photos;            // backup della vecchia standalone
+    }
+    const items=(data.items||[]).map(({photo,lotPhoto,...i})=>({tags:[],...i}));
+    const newLots=(data.lots||[]).map(({photo,...l})=>l);
+    if(!items.length && !newLots.length){ toast('File senza dati di inventario'); return; }
+    const msg='Sostituire l\'archivio di questo dispositivo ('+index.length+' voci, '+lots.length+' lotti)\ncon quello del file ('+items.length+' voci, '+newLots.length+' lotti, '+Object.keys(photos).length+' foto)?';
+    if(!confirm(msg)) return;
+    await store.clear();
+    for(const [id,p] of Object.entries(photos)) await store.set('photo-'+id, p);
+    index=items; lots=newLots; photoCache={};
+    await store.set('inventory-index', JSON.stringify({items:index, lots}));
+    meta={lastChange:Date.now(), lastExport:Date.now()}; await store.set('meta',meta);
+    compSel.clear(); filters={box:null,cat:null}; showOnly=null;
+    refreshAll(); updateBackupBadge(); updateStorageInfo();
+    toast('Archivio importato \u2713 '+items.length+' voci');
+  }catch(err){ console.error(err); toast('Errore lettura file'); }
+  $('impInput').value='';
+});
+
+/* ================= nav ================= */
+document.querySelectorAll('nav button').forEach(b=> b.onclick=()=>switchView(b.dataset.v));
+function switchView(v){
+  document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===v));
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
+  if(v==='v-comp')renderComp();
+  if(v==='v-search')renderSearch();
+  if(v==='v-boxes')renderBoxes();
+  updateComposeBar();
+}
+
+/* web app installata (icona Home in modalità "web app"): i tag NFC si aprono in Safari, che ha un archivio separato */
+if(navigator.standalone || matchMedia('(display-mode: standalone)').matches){
+  const n=$('nfcNote'); if(n) n.innerHTML+='<br><br><b style="color:var(--warn)">Stai usando l\'app dall\'icona in modalità web app.</b> Su iPhone i tag NFC si aprono in Safari, che vede un archivio diverso da questo. Per usare i tag, apri l\'app da Safari (o rimetti l\'icona con "Apri come web app" disattivato).';
+}
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+loadIndex();
+</script>
+</body>
+</html>
