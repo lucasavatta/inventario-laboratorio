@@ -103,6 +103,43 @@ button{font-family:inherit;cursor:pointer;color:inherit}
 .photo-zone .cam{font-size:30px}
 .photo-x{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;width:32px;height:32px;border-radius:50%;font-size:15px;border:0}
 
+
+/* Scatta: tutto in una schermata, senza scorrere */
+html,body{overscroll-behavior-y:none}
+.chips.hscroll{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-right:-12px;padding-right:12px}
+.chips.hscroll::-webkit-scrollbar{display:none}
+.chips.hscroll>*{flex:0 0 auto;max-width:none}
+#v-cap .seg{margin-bottom:8px}
+#v-cap label.f{margin:8px 0 4px}
+.caprow{display:grid;grid-template-columns:104px minmax(0,1fr);gap:8px}
+.caprow .photo-zone{min-height:0;height:104px;font-size:12px;gap:0}
+.caprow .photo-zone img{height:100%;max-height:none}
+.caprow .photo-zone .cam{font-size:26px}
+.caprow .photo-x{top:4px;right:4px;width:28px;height:28px;font-size:13px}
+.caprow .microw{position:relative;display:block}
+.caprow textarea{height:104px;min-height:0;resize:none;padding-right:50px}
+.caprow .btn-mic{position:absolute;right:6px;bottom:6px;width:38px;height:38px;flex:none;font-size:18px;border-radius:50%;background:var(--soft)}
+#capLot .photo-zone{min-height:0;height:150px}
+#capLot .photo-zone img{height:100%;max-height:none}
+#v-cap .tog{margin-top:8px;padding:7px 12px}
+#v-cap .btn.main{margin-top:10px;padding:12px}
+#v-cap .stepper input,#v-cap select,#v-cap input[type=text]{padding-top:8px;padding-bottom:8px}
+#tagSugg{margin-top:5px}
+#tagSugg .chip{cursor:pointer;background:var(--accent-soft);border-color:transparent}
+
+/* Opzioni: sezioni a scomparsa */
+details.set{padding:0;overflow:hidden}
+details.set>summary{list-style:none;display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;min-width:0}
+details.set>summary::-webkit-details-marker{display:none}
+details.set>summary h3{margin:0;font-size:15.5px;flex:0 0 auto}
+details.set>summary .ss{flex:1;min-width:0;text-align:right;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+details.set>summary .chev{flex:0 0 auto;color:var(--muted);font-size:20px;line-height:1;transition:transform .15s}
+details.set[open]>summary .chev{transform:rotate(90deg)}
+details.set[open]>summary{border-bottom:1px solid var(--line)}
+details.set>:not(summary){margin-left:14px;margin-right:14px}
+details.set>:last-child{margin-bottom:14px}
+details.set>summary+*{margin-top:10px}
+
 /* chip */
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:13px;display:inline-flex;align-items:center;gap:6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -186,16 +223,20 @@ button.boxtag.on{outline:3px solid var(--ink);outline-offset:1px}
 .boxhead .bp,.boxhead .bc{font-size:12.5px;color:var(--muted);margin-top:2px}
 
 /* scatole */
-.bgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
-.bcard{background:var(--card);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);cursor:pointer;display:flex;flex-direction:column;border-top:6px solid hsl(var(--h,200) var(--bs) var(--bl))}
-.bcard.none{border-top-color:var(--line)}
+.blist{background:var(--card);border:1px solid var(--line);border-radius:14px;min-height:62vh;margin-top:10px;overflow:hidden}
+.bcard{display:flex;align-items:center;gap:10px;padding:10px 10px 10px 9px;cursor:pointer;border-bottom:1px solid var(--line);border-left:5px solid hsl(var(--h,200) var(--bs) var(--bl));min-width:0}
+.bcard:active{background:var(--soft)}
+.bcard.none{border-left-color:var(--line)}
+.bcard .chev{flex:0 0 auto;color:var(--muted);font-size:20px;line-height:1}
+.bth{flex:0 0 46px;width:46px;height:46px;border-radius:9px;overflow:hidden;position:relative;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:20px}
+.bth img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .mosaic{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:2px;aspect-ratio:16/10;background:var(--soft)}
 .mosaic.n1{grid-template-columns:1fr}
 .mosaic.n0{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
 .mosaic>div{position:relative;overflow:hidden;background:var(--soft);min-height:0}
 .mosaic img{width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0}
-.bcard .bi{padding:9px 10px 11px;min-width:0}
-.bcard .bn{font-size:13.5px;font-weight:600;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bcard .bi{flex:1;min-width:0}
+.bcard .bn{font-size:14px;font-weight:600;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bcard .bp,.bcard .bc{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* overlay editor lotto */
@@ -275,7 +316,7 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
   #results .card{margin-bottom:0}
   #results .empty{grid-column:1/-1}
   .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
-  .bgrid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+  #v-boxes{max-width:760px;margin:0 auto}
   #v-cap,#v-set{max-width:640px;margin:0 auto}
   #lotSection{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
   #lotSection .sect{grid-column:1/-1}
@@ -302,22 +343,23 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
   </div>
 
   <div id="capSingle">
-    <div class="photo-zone" id="photoZone"></div>
-    <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
-
-    <label class="f" for="desc">Descrizione <small>· 🎤 detta a voce</small></label>
-    <div class="microw">
-      <textarea id="desc" rows="2" placeholder="Es. ESC 30A recuperato dal quad 5 pollici"></textarea>
-      <button class="btn-mic" id="micBtn" type="button" aria-label="Detta">🎤</button>
+    <div class="caprow">
+      <div class="photo-zone" id="photoZone"></div>
+      <div class="microw">
+        <textarea id="desc" rows="3" placeholder="Descrizione: es. ESC 30A recuperato dal quad" aria-label="Descrizione"></textarea>
+        <button class="btn-mic" id="micBtn" type="button" aria-label="Detta">🎤</button>
+      </div>
     </div>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
     <div class="fhint" id="descHint"></div>
 
     <label class="f" for="tagInput">Tag <small>· invio o virgola</small></label>
     <input type="text" id="tagInput" placeholder="esc, motore, m3…" autocapitalize="off" enterkeyhint="done">
+    <div class="chips hscroll" id="tagSugg" data-hscroll hidden></div>
     <div class="chips" id="tagChips"></div>
 
     <label class="f">Categoria</label>
-    <div class="chips" id="catPick"></div>
+    <div class="chips hscroll" id="catPick" data-hscroll></div>
 
     <div class="row2">
       <div><label class="f" for="qty">Quantità</label>
@@ -327,7 +369,7 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 
     <div class="tog" id="nfcOpt">
       <div class="sw"></div>
-      <div class="t"><b>Tag NFC sul pezzo</b><br><span id="nfcOptSub">Dopo il salvataggio ti preparo il link da scrivere sul tag.</span></div>
+      <div class="t"><b>Tag NFC sul pezzo</b><span id="nfcOptSub" hidden>Dopo il salvataggio ti preparo il link da scrivere sul tag.</span></div>
     </div>
 
     <button class="btn main pri" id="saveBtn" type="button">Salva e passa al prossimo</button>
@@ -347,11 +389,11 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 
     <div class="tog" id="lotNfcOpt">
       <div class="sw"></div>
-      <div class="t"><b>Tag NFC della scatola</b><br>Dopo il salvataggio ti preparo il link della scatola.</div>
+      <div class="t"><b>Tag NFC della scatola</b></div>
     </div>
 
     <button class="btn main pri" id="saveLotBtn" type="button">Salva lotto</button>
-    <div class="hint" style="margin-top:10px">I pezzi li segni o li ritagli dopo, aprendo il lotto da <b>Componi</b>, anche dal divano 🛋️</div>
+    <div class="hint" style="margin-top:8px">I pezzi li segni o li ritagli dopo, da <b>Componi</b>.</div>
   </div>
 </section>
 
@@ -384,33 +426,33 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 <section class="view" id="v-boxes">
   <div class="vhead"><h2>Scatole</h2><button class="btn sm pri" id="newBoxBtn" type="button">＋ Nuova scatola</button></div>
   <input type="search" id="boxQ" placeholder="Cerca scatola per codice, nome, posto…" autocapitalize="off" hidden>
-  <div class="bgrid" id="boxList"></div>
+  <div class="blist" id="boxList"></div>
 </section>
 
 <!-- ========== 5. IMPOSTAZIONI ========== -->
 <section class="view" id="v-set">
-  <div class="vhead"><h2>Impostazioni</h2></div>
+  <div class="vhead"><h2>Opzioni</h2></div>
 
-  <div class="card pad">
-    <h3>Archivi</h3>
+  <details class="card pad set">
+    <summary><h3>Archivi</h3><span class="ss" id="ssArch"></span><span class="chev">›</span></summary>
     <div class="hint">Ogni archivio ha le sue scatole, categorie e stati: laboratorio, armadio per il cambio di stagione, cantina… Si cambia dal pulsante in alto a sinistra.</div>
     <div id="archList" style="margin-top:8px"></div>
     <div class="btns"><button class="btn" id="archAdd" type="button">＋ Nuovo archivio</button></div>
-  </div>
+  </details>
 
-  <div class="card pad">
-    <h3>Aspetto</h3>
+  <details class="card pad set">
+    <summary><h3>Aspetto</h3><span class="ss" id="ssTheme"></span><span class="chev">›</span></summary>
     <div class="themes" id="themePick"></div>
-  </div>
+  </details>
 
-  <div class="card pad">
-    <h3>Dettatura 🎤</h3>
+  <details class="card pad set">
+    <summary><h3>Dettatura 🎤</h3><span class="ss" id="ssMic"></span><span class="chev">›</span></summary>
     <div class="hint" id="micInfo"></div>
     <div class="chips" id="micPick" style="margin-top:8px"></div>
-  </div>
+  </details>
 
-  <div class="card pad" id="syncCard">
-    <h3>Sincronizzazione</h3>
+  <details class="card pad set" id="syncCard">
+    <summary><h3>Sincronizzazione</h3><span class="ss" id="ssSync"></span><span class="chev">›</span></summary>
     <div id="syncOff">
       <div class="hint">Collega un <b>repository GitHub privato</b>: ogni modifica viene inviata da sola e gli altri dispositivi (Mac, iPhone) si aggiornano da soli. Va fatto una volta su ogni dispositivo e su ogni browser.</div>
       <label class="f" for="syncRepo">Repository dei dati</label>
@@ -428,10 +470,10 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
       </div>
       <div class="btns"><button class="btn" id="syncCopyKey" type="button">Copia la chiave (per un altro browser)</button></div>
     </div>
-  </div>
+  </details>
 
-  <div class="card pad">
-    <h3>Backup e file</h3>
+  <details class="card pad set">
+    <summary><h3>Backup e file</h3><span class="ss" id="ssBkp"></span><span class="chev">›</span></summary>
     <div class="hint">Facoltativo con la sincronizzazione attiva. L'<b>archivio ZIP</b> contiene tutto (dati, foto, elenco leggibile dall'AI): salvalo su iCloud Drive / Google Drive o mandalo al Mac con AirDrop.</div>
     <div class="btns"><button class="btn pri" id="expZip" type="button">Esporta archivio ZIP</button></div>
     <div class="btns">
@@ -441,17 +483,17 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
     </div>
     <input type="file" id="impInput" accept=".zip,.json,application/zip,application/json" hidden>
     <div class="hint" id="storageInfo" style="margin-top:10px"></div>
-  </div>
+  </details>
 
-  <div class="card pad">
-    <h3>Tag NFC</h3>
+  <details class="card pad set">
+    <summary><h3>Tag NFC</h3><span class="ss" id="ssNfc"></span><span class="chev">›</span></summary>
     <div class="hint" id="nfcNote"></div>
-  </div>
+  </details>
 
-  <div class="card pad">
-    <h3>Informazioni</h3>
-    <div class="sub">v5.0.0 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
-  </div>
+  <details class="card pad set">
+    <summary><h3>Informazioni</h3><span class="ss" id="ssInfo"></span><span class="chev">›</span></summary>
+    <div class="sub">v5.1.0 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
+  </details>
 </section>
 
 </main>
@@ -1044,8 +1086,8 @@ function photoZone(zoneId, inputId, emptyHtml, onChange){
   render(null);
   return render;
 }
-const showPhoto = photoZone('photoZone','photoInput','<span class="cam">📷</span><span>Tocca per scattare</span>', v=>{ curPhoto=v; saveDraft(); });
-const showLotPhoto = photoZone('lotZone','lotInput','<span class="cam">🗂️</span><span>Fotografa la scatola aperta col contenuto<br>(pezzi separati, luce dall\'alto)</span>', v=>{ curLotPhoto=v; });
+const showPhoto = photoZone('photoZone','photoInput','<span class="cam">📷</span><span>Foto</span>', v=>{ curPhoto=v; saveDraft(); });
+const showLotPhoto = photoZone('lotZone','lotInput','<span class="cam">🗂️</span><span>Fotografa la scatola aperta<br>(pezzi separati, luce dall\'alto)</span>', v=>{ curLotPhoto=v; });
 $('photoInput').addEventListener('change', async e=>{
   const f=e.target.files[0]; if(!f)return;
   try{ curPhoto = await compress(f,700,.62); showPhoto(curPhoto); saveDraft(); }catch(err){ toast('Foto non leggibile'); }
@@ -1066,6 +1108,8 @@ $('segLot').onclick=()=>setSeg(true);
    qualche secondo, o se il browser non lo offre, si passa alla dettatura della tastiera. */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+// Chrome, Firefox, Edge su iPhone: il riconoscimento vocale della pagina non funziona (si blocca), vale solo quello della tastiera
+const IOS_NO_SR = IOS && /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(navigator.userAgent);
 let dict=null;
 function fieldHint(target, msg){
   const h=$(target.id+'Hint'); if(!h){ toast(msg); return; }
@@ -1073,13 +1117,13 @@ function fieldHint(target, msg){
 }
 function keyboardDictation(target, why){
   target.focus(); const n=target.value.length; try{ target.setSelectionRange(n,n); }catch(e){}
-  fieldHint(target, (why?why+' ':'')+'Usa il 🎤 della tastiera: tocca il campo, poi il microfono in basso sulla tastiera. Va bene anche per testi lunghi.');
+  fieldHint(target, (why?why+' ':'')+'Ora tocca il 🎤 in basso a destra sulla tastiera e detta: va bene anche per testi lunghi.');
 }
 function stopDictation(){ if(dict){ try{ dict.rec.stop(); }catch(e){} setTimeout(()=>{ if(dict && dict.stopping) endDictation(); },1500); dict.stopping=true; } }
 function endDictation(){ if(!dict) return; const d=dict; dict=null; clearTimeout(d.wd); clearTimeout(d.max); clearTimeout(d.quiet); d.btn.classList.remove('rec'); try{ d.rec.abort(); }catch(e){} saveDraft(); }
 function startDictation(btn, target){
   if(dict){ const same=dict.btn===btn; stopDictation(); if(same) return; endDictation(); }
-  if(!SR || ui.mic==='keyboard') return keyboardDictation(target);
+  if(!SR || ui.mic==='keyboard' || IOS_NO_SR) return keyboardDictation(target);
   let rec; try{ rec=new SR(); }catch(e){ return keyboardDictation(target); }
   rec.lang='it-IT'; rec.interimResults=true; rec.continuous=!IOS; rec.maxAlternatives=1;
   const base=target.value.trim() ? target.value.replace(/\s+$/,'')+' ' : '';
@@ -1114,6 +1158,19 @@ $('tagInput').addEventListener('keydown', e=>{
 $('tagInput').addEventListener('input', ()=>{ const v=$('tagInput').value; if(v.includes(',')){ v.split(',').forEach(addTag); $('tagInput').value=''; } });
 $('tagInput').addEventListener('blur', ()=>{ if($('tagInput').value.trim()){ addTag($('tagInput').value); $('tagInput').value=''; } });
 function addTag(t){ t=t.replace(/,/g,'').trim().toLowerCase(); if(t&&!curTags.includes(t)){ curTags.push(t); renderTags(); saveDraft(); } }
+function renderTagSugg(){
+  const el=$('tagSugg'), cnt={};
+  for(const i of items()) for(const t of (i.tags||[])) cnt[t]=(cnt[t]||0)+1;
+  const q=$('tagInput').value.trim().toLowerCase();
+  const list=Object.keys(cnt).filter(t=>!curTags.includes(t) && (!q || t.includes(q))).sort((a,b)=>cnt[b]-cnt[a]||a.localeCompare(b)).slice(0,12);
+  el.innerHTML=list.map(t=>'<button type="button" class="chip" data-t="'+esc(t)+'">＋ '+esc(t)+'</button>').join('');
+  el.hidden=!list.length || document.activeElement!==$('tagInput');
+  // pointerdown: aggiunge il tag senza far perdere il cursore al campo
+  el.querySelectorAll('button').forEach(b=> b.onpointerdown=ev=>{ ev.preventDefault(); $('tagInput').value=''; addTag(b.dataset.t); renderTagSugg(); });
+}
+$('tagInput').addEventListener('focus', renderTagSugg);
+$('tagInput').addEventListener('input', renderTagSugg);
+$('tagInput').addEventListener('blur', ()=>setTimeout(()=>{ $('tagSugg').hidden=true; },150));
 function renderTags(){
   $('tagChips').innerHTML = curTags.map((t,i)=>'<span class="chip">'+esc(t)+' <b data-i="'+i+'" role="button" aria-label="togli">✕</b></span>').join('');
   $('tagChips').querySelectorAll('b').forEach(b=> b.onclick=()=>{ curTags.splice(+b.dataset.i,1); renderTags(); saveDraft(); });
@@ -1705,23 +1762,22 @@ function renderBoxes(){
   const un=its.filter(i=>!i.box && !i.light).length, unl=L.filter(l=>!l.box).length;
   let html='';
   if(un+unl>0 && !words.length){
-    html+=`<div class="bcard none" id="goComp"><div class="mosaic n0">🧩</div><div class="bi"><span class="boxtag none big">Da sistemare</span>
-      <div class="bc">${pl(un,'pezzo','pezzi')}${unl?' · '+pl(unl,'lotto','lotti'):''} in attesa</div><div class="bp">Tocca per comporre</div></div></div>`;
+    html+=`<div class="bcard none" id="goComp"><div class="bth">🧩</div><div class="bi"><span class="boxtag none">Da sistemare</span>
+      <div class="bc">${pl(un,'pezzo','pezzi')}${unl?' · '+pl(unl,'lotto','lotti'):''} in attesa · tocca per comporre</div></div><span class="chev">›</span></div>`;
   }
   html+=boxes.filter(b=>{ if(!words.length) return true; const bi=boxInfo(b); const hay=norm([b, bi&&bi.name, bi&&bi.place].join(' ')); return words.every(w=>hay.includes(w)); }).map(b=>{
     const inb=its.filter(i=>i.box===b), bl=L.filter(l=>l.box===b), bi=boxInfo(b);
     const pz=inb.reduce((s,i)=>s+(+i.qty||0),0);
-    // anteprima: prima le foto lotto, poi le foto dei pezzi (max 4)
-    const ph=[...bl.map(l=>l.id), ...inb.filter(i=>i.hasPhoto).map(i=>i.id)].slice(0,4);
-    const mosaic = ph.length ? '<div class="mosaic n'+(ph.length===1?1:4)+'">'+ph.map(id=>'<div data-ph="'+esc(id)+'"></div>').join('')+'</div>' : '<div class="mosaic n0">📦</div>';
-    return `<div class="bcard" data-b="${esc(b)}" style="--h:${hue(b)}">${mosaic}
-      <div class="bi">${boxTag(b,'big')}
+    // miniatura: la foto del lotto, altrimenti la prima foto di un pezzo
+    const ph=[...bl.map(l=>l.id), ...inb.filter(i=>i.hasPhoto).map(i=>i.id)][0];
+    const thumb = ph ? '<div class="bth" data-ph="'+esc(ph)+'"></div>' : '<div class="bth">📦</div>';
+    return `<div class="bcard" data-b="${esc(b)}" style="--h:${hue(b)}">${thumb}
+      <div class="bi">${boxTag(b)}
         ${bi&&bi.name?'<div class="bn">'+esc(bi.name)+'</div>':''}
-        ${bi&&bi.place?'<div class="bp">📍 '+esc(bi.place)+'</div>':''}
-        <div class="bc">${pl(inb.length,'voce','voci')} · ${pl(pz,'pezzo','pezzi')}${bl.length?' · '+bl.length+' 🗂️':''}</div>
-      </div></div>`;
+        <div class="bc">${bi&&bi.place?'📍 '+esc(bi.place)+' · ':''}${pl(inb.length,'voce','voci')} · ${pl(pz,'pezzo','pezzi')}${bl.length?' · '+bl.length+' 🗂️':''}</div>
+      </div><span class="chev">›</span></div>`;
   }).join('');
-  if(!html) html='<div class="empty" style="grid-column:1/-1"><span class="big">📦</span>'+(words.length?'Nessuna scatola trovata':'<b>Nessuna scatola</b><br>Fai il rilievo, poi componi le scatole da 🧩 Componi oppure crea una scatola qui.')+'</div>';
+  if(!html) html='<div class="empty"><span class="big">📦</span>'+(words.length?'Nessuna scatola trovata':'<b>Nessuna scatola</b><br>Fai il rilievo, poi componi le scatole da 🧩 Componi oppure crea una scatola qui.')+'</div>';
   $('boxList').innerHTML=html;
   fillPhotos($('boxList'));
   $('boxList').querySelectorAll('.bcard[data-b]').forEach(x=> x.onclick=()=>openBox(x.dataset.b));
@@ -1902,7 +1958,7 @@ $('syncCopyKey').onclick=async ()=>{
 function showRecoverHint(){
   const html='<div class="card pad recover" data-v="%V"><h3>Archivio vuoto qui</h3><div class="hint">Hai già inventariato da un\'altra icona, browser o dispositivo? I dati sono al sicuro su GitHub: <b>collega la sincronizzazione</b> e li ritrovi tutti, foto comprese.</div><div class="btns"><button class="btn pri recoverGo" type="button">Collega e recupera</button></div></div>';
   ['v-cap','v-search'].forEach(v=>{ const sec=$(v); if(sec && !sec.querySelector('.recover')) sec.insertAdjacentHTML('afterbegin', html.replace('%V',v)); });
-  document.querySelectorAll('.recoverGo').forEach(b=> b.onclick=()=>{ switchView('v-set'); setTimeout(()=>{ $('syncCard').scrollIntoView({behavior:'smooth',block:'start'}); $('syncToken').focus(); },60); });
+  document.querySelectorAll('.recoverGo').forEach(b=> b.onclick=()=>{ switchView('v-set'); openSet('syncCard'); setTimeout(()=>{ $('syncCard').scrollIntoView({behavior:'smooth',block:'start'}); $('syncToken').focus(); },60); });
 }
 $('syncOff2').onclick=async ()=>{
   if(!await confirmDlg('Scollegare questo dispositivo?','I dati restano qui e sul repository.', 'Scollega')) return;
@@ -2040,7 +2096,7 @@ $('zipShare').onclick=async ()=>{
 };
 $('zipDl').onclick=async ()=>{ download(readyFile.name,'application/zip',readyFile); await markExported(); toast('ZIP scaricato ✓'); show('zipBg',false); };
 $('zipClose').onclick=()=>show('zipBg',false);
-$('bkpBadge').onclick=()=>{ switchView('v-set'); setTimeout(()=>$('syncCard').scrollIntoView({behavior:'smooth',block:'start'}),50); if(cfg && syncState!=='run') sync(); };
+$('bkpBadge').onclick=()=>{ switchView('v-set'); openSet('syncCard'); setTimeout(()=>$('syncCard').scrollIntoView({behavior:'smooth',block:'start'}),50); if(cfg && syncState!=='run') sync(); };
 $('expCsv').onclick=()=>{ download('inventario-'+today()+'.csv','text/csv;charset=utf-8',buildCsv()); toast('CSV scaricato'); };
 $('expJson').onclick=()=>{ download('inventario-'+today()+'.json','application/json',JSON.stringify(buildJson(),null,1)); toast('JSON scaricato (senza foto)'); };
 
@@ -2085,13 +2141,24 @@ $('impInput').addEventListener('change', async e=>{
 
 /* ================= navigazione ================= */
 document.querySelectorAll('nav button').forEach(b=> b.onclick=()=>{ if(b.dataset.v==='v-search' && $('v-search').classList.contains('active')){ filters={box:null,cat:null}; showOnly=null; } switchView(b.dataset.v); });
+function updSetSum(){
+  const set=(id,t)=>{ const e=$(id); if(e) e.textContent=t; };
+  set('ssArch', arch().name);
+  set('ssTheme', (THEMES.find(t=>t[0]===ui.theme)||THEMES[0])[1]);
+  set('ssMic', ui.mic==='keyboard'?'tastiera':'automatica');
+  const hm = meta.lastSync ? new Date(meta.lastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '';
+  set('ssSync', cfg ? (syncState==='error'?'⚠ errore':syncState==='offline'?'offline':'attiva'+(hm?' · '+hm:'')) : 'non attiva');
+  const vv=document.querySelector('#v-set .sub'); set('ssInfo', vv?vv.textContent.split('·')[0].trim():'');
+}
+$('v-set').addEventListener('click', ()=>setTimeout(updSetSum,60));
+function openSet(id){ const d=$(id); if(d && d.tagName==='DETAILS') d.open=true; }
 function switchView(v){
   document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===v));
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
   if(v==='v-comp')renderComp();
   if(v==='v-search')renderSearch();
   if(v==='v-boxes')renderBoxes();
-  if(v==='v-set'){ renderSettings(); updateStorageInfo(); }
+  if(v==='v-set'){ renderSettings(); updateStorageInfo(); updSetSum(); }
   updateComposeBar();
 }
 

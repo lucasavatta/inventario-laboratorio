@@ -43,6 +43,10 @@ Niente framework e niente dipendenze a runtime oltre JSZip (niente font esterni:
 - Ogni scatola ha una tinta presa dal codice (`hue()`): codici consecutivi hanno colori diversi.
 - **Niente `alert/confirm/prompt`**: si usano `dialog()`, `confirmDlg()`, `pickBox()` (scelta scatola a un tocco o codice nuovo). I test controllano che non compaiano dialoghi nativi.
 - Il toast compare **in alto**, così non finisce sotto la tastiera.
+- **Scatta sta in una schermata, senza scorrere** (test a 393×640): foto (riquadro 104 px) e descrizione affiancate, 🎤 dentro il campo, categorie su una riga a scorrimento orizzontale (`.chips.hscroll` + `data-hscroll`), interruttore NFC su una riga. Se aggiungi campi, verifica che il test "Scatta: nessuno scorrimento" resti verde.
+- **Tag già usati a un tocco** (`renderTagSugg`): compaiono sotto il campo Tag solo mentre ci scrivi, ordinati per uso.
+- **Scatole è un elenco** dentro un riquadro (`.blist`, righe `.bcard` con miniatura, nome, posto, conteggi): toccando una riga si apre il contenuto. Niente altro in quella pagina.
+- **Opzioni a sezioni chiuse** (`<details class="card pad set">`), con a destra un riepilogo di una parola (`updSetSum`). Niente testi lunghi a vista: le spiegazioni stanno dentro la sezione. Nei test usa `goSet(p)`, che le apre tutte.
 
 ## Modello dati (IndexedDB locale)
 
@@ -85,6 +89,7 @@ Layout del repo dati: `inventario.json`, `inventario.md` (per scatola, pensato p
 
 - **iOS non ha Web NFC.** Il tag contiene un **link** `…/inventario-laboratorio/#b=CODICE` (scatola, con `&a=ARCHIVIO` se non è il laboratorio) o `#p=ID` (pezzo), letto da `handleHash()`, che passa da solo all'archivio giusto. I tag vecchi senza `&a=` restano validi. Si scrive con l'app NFC Tools (wakdev, gratuita), record URL. NFC Tools aggiunge già `https://`: per questo "Copia link" copia l'indirizzo **senza** schema. Su Android il tag si scrive direttamente con `NDEFReader`.
 - **I tag letti da iPhone aprono sempre Safari**, anche se il browser predefinito è Chrome. Ogni browser e ogni icona Home ha **un archivio locale separato**, quindi ciascuno va collegato alla sincronizzazione. C'è il tasto "Copia la chiave" per farlo senza rigenerarla.
+- **Chrome, Firefox, Edge su iPhone (`IOS_NO_SR`):** il riconoscimento vocale della pagina non funziona (si blocca), quindi il 🎤 porta subito alla dettatura della tastiera con l'avviso sotto il campo. Solo Safari su iPhone prova la dettatura della pagina.
 - **Dettatura (`startDictation`):** un'istanza **nuova** di SpeechRecognition a ogni pressione (riusarla su iOS la bloccava), testo scritto nel campo mentre si parla, su iOS chiusura dopo 2,5 s di silenzio. Se non parte entro 4 s, se dà errore o se il browser non la offre (Chrome iOS) → cursore nel campo + avviso visibile sotto il campo per usare il 🎤 della tastiera. In Opzioni si può forzare "Sempre tastiera". **Da verificare sull'iPhone reale** (Safari e Chrome).
 - **Elementi sotto la barra di navigazione fissa:** `body` usa `min-height` (non `height:100%`), altrimenti il pulsante Salva finisce sotto la barra.
 - **Cache di GitHub Pages (10 min):** il service worker scarica la pagina con `cache:'no-cache'`, così gli aggiornamenti arrivano subito.

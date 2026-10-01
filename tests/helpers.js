@@ -90,9 +90,12 @@ const dlgChoice = async (p,label) => { await p.waitForSelector('#dlgBg.show'); a
 const overflow = p => p.evaluate(()=>{
   const W=innerWidth, out=[];
   if(document.documentElement.scrollWidth>W) out.push('pagina '+document.documentElement.scrollWidth+'>'+W);
-  for(const e of document.querySelectorAll('body *')){ const r=e.getBoundingClientRect(); if(r.width && r.height && r.right>W+1 && getComputedStyle(e).visibility!=='hidden') out.push((e.id||e.className||e.tagName)+' '+Math.round(r.right)); }
+  // le righe a scorrimento orizzontale (data-hscroll) possono avere figli oltre il bordo: è voluto
+  for(const e of document.querySelectorAll('body *')){ if(e.parentElement && e.parentElement.closest('[data-hscroll]')) continue; const r=e.getBoundingClientRect(); if(r.width && r.height && r.right>W+1 && getComputedStyle(e).visibility!=='hidden') out.push((e.id||e.className||e.tagName)+' '+Math.round(r.right)); }
   return out.slice(0,5);
 });
+// scheda Opzioni con tutte le sezioni aperte (di norma sono chiuse e si aprono con un tocco)
+const goSet = async p => { await p.click('nav button[data-v=v-set]'); await p.evaluate(()=>document.querySelectorAll('#v-set details').forEach(d=>d.open=true)); await p.waitForTimeout(100); };
 const waitSync = async p => { await p.waitForTimeout(300); await p.waitForFunction(()=>!/Sincronizzo|in invio/.test(document.getElementById('bkpBadge').textContent),null,{timeout:20000}); };
 
 function checker(){
@@ -101,4 +104,4 @@ function checker(){
   return { check, get failed(){ return failed; } };
 }
 
-module.exports = { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, dlgText, dlgOk, dlgChoice, overflow };
+module.exports = { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, dlgText, dlgOk, dlgChoice, overflow, goSet };

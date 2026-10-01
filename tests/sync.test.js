@@ -1,10 +1,10 @@
 // Sincronizzazione iPhone ↔ Mac con finto GitHub: invio, ricezione, offline, conflitti, niente commit inutili
-const { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG } = require('./helpers');
+const { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, goSet } = require('./helpers');
 
 module.exports = async function(){
   const srv = await startServer(); const b = await launch(); const G = mockGitHub(); const C = checker();
   const st = p => p.evaluate(()=>({items:index.map(i=>i.desc+'|'+(i.box||'-')+'|'+i.qty).sort(), lots:lots.length, badge:document.getElementById('bkpBadge').textContent}));
-  const connect = async p => { await p.click('nav button[data-v=v-set]'); await p.fill('#syncRepo','luca/dati'); await p.fill('#syncToken','tok'); await tap(p,'#syncConnect'); };
+  const connect = async p => { await goSet(p); await p.fill('#syncRepo','luca/dati'); await p.fill('#syncToken','tok'); await tap(p,'#syncConnect'); };
   try{
     console.log('sync · 1. iPhone: rilievo, poi collega e invia');
     const ph = await device(b, srv.url, 'iPhone', {github:G});

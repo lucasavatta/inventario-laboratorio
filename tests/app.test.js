@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { startServer, launch, device, tap, checker, IMG, dlgText, dlgOk, dlgChoice, overflow } = require('./helpers');
+const { startServer, launch, device, tap, checker, IMG, dlgText, dlgOk, dlgChoice, overflow, goSet } = require('./helpers');
 
 // finto riconoscimento vocale: "detta" una frase dopo l'avvio
 const FAKE_SR = () => {
@@ -67,11 +67,11 @@ module.exports = async function(){
     C.check(await p.evaluate(()=>index.filter(i=>i.box==='B02').length)===2, 'Sposta: scelta della scatola con un tocco');
 
     console.log('app · 4. export ZIP e import su un altro dispositivo');
-    await p.click('nav button[data-v=v-set]'); await tap(p,'#expZip'); await p.waitForSelector('#zipBg.show');
+    await goSet(p); await tap(p,'#expZip'); await p.waitForSelector('#zipBg.show');
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#zipDl')]);
     await dl.saveAs(zipPath);
     const mac = await device(b, srv.url, 'Mac');
-    await mac.click('nav button[data-v=v-set]'); await mac.setInputFiles('#impInput', zipPath); await mac.waitForTimeout(600); await dlgOk(mac); await mac.waitForTimeout(600);
+    await goSet(mac); await mac.setInputFiles('#impInput', zipPath); await mac.waitForTimeout(600); await dlgOk(mac); await mac.waitForTimeout(600);
     await mac.click('nav button[data-v=v-search]'); await mac.waitForTimeout(800);
     C.check(await mac.evaluate(()=>index.length)===3 && await mac.locator('#results .thumb.ok').count()===3, 'import: 3 voci con foto');
     C.check(await mac.evaluate(()=>boxInfo('B02')?.place)==='Scaffale garage, ripiano 2', 'import: nome e posto delle scatole');
@@ -80,14 +80,18 @@ module.exports = async function(){
     await p.click('nav button[data-v=v-cap]'); await p.click('#segSingle');
     await p.click('#micBtn'); await p.waitForTimeout(150);
     C.check(await p.evaluate(()=>document.activeElement.id)==='desc' && await p.locator('#descHint.show').count()===1, 'senza dettatura della pagina: cursore nel campo e avviso visibile (non sotto la tastiera)');
-    const s1 = await device(b, srv.url, 'iPhone', {init:FAKE_SR});
+    const s1 = await device(b, srv.url, 'iPhone', {init:FAKE_SR, userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1'});   // Safari su iPhone: la pagina può dettare
     await s1.fill('#desc','Ricambio'); await s1.click('#micBtn'); await s1.waitForTimeout(600);
-    C.check(await s1.inputValue('#desc')==='Ricambio motore brushless 2207', 'iPhone: il 🎤 scrive nel campo quello che detti');
+    C.check(await s1.inputValue('#desc')==='Ricambio motore brushless 2207', 'iPhone Safari: il 🎤 scrive nel campo quello che detti');
     await s1.click('#micBtn'); await s1.waitForTimeout(600);
     C.check(await s1.evaluate(()=>window.__srStarts)===2 && /2207 motore brushless 2207$/.test(await s1.inputValue('#desc')), 'seconda dettatura di fila (prima su iOS si bloccava)');
-    const s2 = await device(b, srv.url, 'iPhone', {init:DEAD_SR});
+    const s2 = await device(b, srv.url, 'iPhone', {init:DEAD_SR, userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1'});
     await s2.click('#micBtn'); await s2.waitForTimeout(4400);
     C.check(await s2.evaluate(()=>!document.querySelector('.btn-mic.rec') && document.activeElement.id==='desc') && await s2.locator('#descHint.show').count()===1, 'se la dettatura non parte entro 4 s si passa alla tastiera');
+    // Chrome su iPhone: il riconoscimento della pagina esiste ma si blocca → subito tastiera, senza aspettare
+    const s3 = await device(b, srv.url, 'iPhone', {init:DEAD_SR});
+    await s3.click('#micBtn'); await s3.waitForTimeout(300);
+    C.check(await s3.evaluate(()=>!document.querySelector('.btn-mic.rec') && document.activeElement.id==='desc' && !window.__srStarts) && await s3.locator('#descHint.show').count()===1, 'Chrome su iPhone: subito dettatura da tastiera, senza attese');
 
     console.log('app · 6. bozza salvata se l\'app si chiude a metà');
     await p.fill('#desc','Resistenze 1/4W: 10k x20, 4k7 x15'); await p.fill('#qty','35'); await p.waitForTimeout(700);
@@ -96,7 +100,7 @@ module.exports = async function(){
     await p.fill('#desc',''); await p.waitForTimeout(500);
 
     console.log('app · 7. archivi separati (cambio stagione)');
-    await p.click('nav button[data-v=v-set]'); await tap(p,'#archAdd'); await dlgChoice(p,'Armadio');
+    await goSet(p); await tap(p,'#archAdd'); await dlgChoice(p,'Armadio');
     await p.click('#archEdSave'); await p.waitForTimeout(300);
     C.check(await p.evaluate(()=>AID()!=='lab' && arch().name==='Armadio') && (await p.textContent('#archName'))==='Armadio', 'nuovo archivio Armadio, attivo');
     await p.click('nav button[data-v=v-cap]');
@@ -113,15 +117,36 @@ module.exports = async function(){
     C.check(await p.evaluate(()=>arch().name==='Armadio' && filters.box==='A1'), 'il tag di A1 apre l\'armadio anche se ero nel laboratorio');
 
     console.log('app · 8. temi');
-    await p.click('nav button[data-v=v-set]'); await p.click('#themePick [data-t=notte]'); await p.waitForTimeout(100);
+    await goSet(p); await p.click('#themePick [data-t=notte]'); await p.waitForTimeout(100);
     C.check(await p.evaluate(()=>document.documentElement.dataset.theme==='notte' && getComputedStyle(document.body).backgroundColor==='rgb(25, 28, 33)'), 'tema Notte applicato');
     await p.reload(); await p.waitForTimeout(500);
     C.check(await p.evaluate(()=>document.documentElement.dataset.theme)==='notte', 'il tema resta dopo la riapertura');
 
+    console.log('app · 8b. Scatta in una schermata, Scatole in elenco, Opzioni a scomparsa, tag a un tocco');
+    await p.setViewportSize({width:393, height:640});
+    await p.evaluate(()=>setArch('lab'));
+    await p.click('nav button[data-v=v-cap]'); await p.click('#segSingle'); await p.waitForTimeout(200);
+    const fit = await p.evaluate(()=>({sh:document.documentElement.scrollHeight, ih:innerHeight, save:document.getElementById('saveBtn').getBoundingClientRect().bottom, nav:document.querySelector('nav').getBoundingClientRect().top}));
+    C.check(fit.sh<=fit.ih && fit.save<=fit.nav, 'Scatta: nessuno scorrimento a 393×640 e Salva sopra la barra ('+JSON.stringify(fit)+')');
+    await p.click('#tagInput'); await p.waitForTimeout(150);
+    C.check(await p.locator('#tagSugg:not([hidden]) button').count()>0, 'tag già usati proposti mentre scrivi i tag');
+    await p.locator('#tagSugg button').first().dispatchEvent('pointerdown'); await p.waitForTimeout(100);
+    C.check(await p.evaluate(()=>curTags.length===1), 'un tocco aggiunge il tag');
+    await p.evaluate(()=>{ curTags=[]; renderTags(); saveDraft(); document.activeElement.blur(); });
+    await p.click('nav button[data-v=v-boxes]'); await p.waitForTimeout(200);
+    C.check(await p.evaluate(()=>{ const l=document.getElementById('boxList'), r=l.querySelector('.bcard[data-b]'); return !!r && l.getBoundingClientRect().height>=innerHeight*0.55 && r.getBoundingClientRect().height<80; }), 'Scatole: elenco a righe dentro un riquadro alto');
+    await p.click('#boxList .bcard[data-b]'); await p.waitForTimeout(250);
+    C.check(await p.evaluate(()=>document.getElementById('v-search').classList.contains('active')), 'toccando una scatola si apre il contenuto');
+    await p.click('nav button[data-v=v-set]'); await p.waitForTimeout(150);
+    C.check(await p.evaluate(()=>[...document.querySelectorAll('#v-set details')].every(d=>!d.open) && document.documentElement.scrollHeight<=innerHeight+2), 'Opzioni: sezioni chiuse, niente muro di testo');
+    await p.click('#syncCard summary'); await p.waitForTimeout(100);
+    C.check(await p.locator('#syncToken').isVisible(), 'la sezione si apre con un tocco');
+    await p.setViewportSize({width:393, height:852});
+
     console.log('app · 9. tutto dentro lo schermo (320 px, iPhone SE)');
     await p.setViewportSize({width:320, height:640});
     const bad=[];
-    for (const v of ['v-cap','v-comp','v-search','v-boxes','v-set']){ await p.click('nav button[data-v='+v+']'); await p.waitForTimeout(250); const o=await overflow(p); if(o.length) bad.push(v+': '+o.join(', ')); }
+    for (const v of ['v-cap','v-comp','v-search','v-boxes','v-set']){ if(v==='v-set') await goSet(p); else await p.click('nav button[data-v='+v+']'); await p.waitForTimeout(250); const o=await overflow(p); if(o.length) bad.push(v+': '+o.join(', ')); }
     await p.click('nav button[data-v=v-cap]'); await p.click('#segLot'); { const o=await overflow(p); if(o.length) bad.push('lotto: '+o.join(', ')); } await p.click('#segSingle');
     await p.click('#archBtn'); await dlgChoice(p,'Laboratorio');
     await p.click('nav button[data-v=v-comp]'); await p.click('.lotcard'); await p.waitForTimeout(300); { const o=await overflow(p); if(o.length) bad.push('editor lotto: '+o.join(', ')); }
