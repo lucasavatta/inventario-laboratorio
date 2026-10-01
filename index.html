@@ -195,7 +195,7 @@ header{padding-top:calc(14px + env(safe-area-inset-top))}
 
 <header>
   <h1><span class="dot"></span>Inventario Officina</h1>
-  <div class="sub">v4.1 · Rilievo · Lotti · Composizione · Ricerca</div>
+  <div class="sub">v4.2 · Rilievo · Lotti · Composizione · Ricerca</div>
   <span class="bkp" id="bkpBadge" style="display:none"></span>
 </header>
 
@@ -325,6 +325,7 @@ header{padding-top:calc(14px + env(safe-area-inset-top))}
         <button class="btn-volt" id="syncNow">Sincronizza ora</button>
         <button class="btn-ghost" id="syncOff2">Scollega</button>
       </div>
+      <div class="row"><button class="btn-ghost" id="syncCopyKey">Copia la chiave (per collegare un'altra icona o browser)</button></div>
     </div>
   </div>
   <div class="exp">
@@ -498,7 +499,8 @@ async function loadIndex(){
     const c = await store.get('sync-cfg'); if(c && c.value && c.value.token) cfg = c.value;
   }catch(e){ index=[]; lots=[]; }
   takeSnap();
-  refreshAll(); updateBackupBadge(); renderSyncCard(); handleHash();
+  refreshAll(); updateBackupBadge(); renderSyncCard(); handleHash(); restoreDraft();
+  if(!cfg && !index.length && !lots.length) showRecoverHint();
   try{ if(navigator.storage&&navigator.storage.persist) await navigator.storage.persist(); }catch(e){}
   updateStorageInfo();
   if(cfg) sync();
@@ -731,7 +733,7 @@ $('segLot').onclick = ()=>{ $('segLot').classList.add('on'); $('segSingle').clas
 $('photoZone').addEventListener('click', e=>{ if(e.target.classList.contains('photo-x'))return; $('photoInput').click(); });
 $('photoInput').addEventListener('change', async e=>{
   const f=e.target.files[0]; if(!f)return;
-  curPhoto = await compress(f,700,.62); showPhoto(curPhoto);
+  curPhoto = await compress(f,700,.62); showPhoto(curPhoto); saveDraft();
 });
 function showPhoto(b64){
   const z=$('photoZone');
@@ -758,9 +760,10 @@ function showLotPhoto(b64){
 /* ================= voice (shared) ================= */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec=null, recOn=false, recTarget=null;
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
 function bindMic(btnId, targetId){
   $(btnId).onclick = ()=>{
-    if(!SR){ toast('Usa il microfono della tastiera del telefono'); return; }
+    if(!SR || IOS){ const t=$(targetId); t.focus(); t.setSelectionRange(t.value.length,t.value.length); toast('Tocca il 🎤 della tastiera e detta: anche testi lunghi'); return; }
     if(recOn){ rec.stop(); return; }
     recTarget = $(targetId);
     try{ rec.start(); recOn=true; $(btnId).classList.add('rec'); recBtn=$(btnId); }
@@ -770,6 +773,7 @@ function bindMic(btnId, targetId){
 let recBtn=null;
 if(SR){
   rec = new SR(); rec.lang='it-IT'; rec.interimResults=false;
+  rec.onstart = ()=>{ clearTimeout(rec._guard); rec._guard=setTimeout(()=>{ try{rec.abort();}catch(e){} }, 60000); };
   rec.onresult = e=>{ const t=e.results[0][0].transcript; if(recTarget) recTarget.value=(recTarget.value?recTarget.value+' ':'')+t; };
   rec.onend = ()=>{ recOn=false; if(recBtn)recBtn.classList.remove('rec'); };
   rec.onerror = ()=>{ recOn=false; if(recBtn)recBtn.classList.remove('rec'); toast('Microfono non disponibile qui — usa il mic della tastiera'); };
@@ -782,7 +786,7 @@ $('tagInput').addEventListener('keydown', e=>{
   if(e.key==='Enter'||e.key===','){ e.preventDefault(); addTag($('tagInput').value); $('tagInput').value=''; }
 });
 $('tagInput').addEventListener('blur', ()=>{ if($('tagInput').value.trim()){ addTag($('tagInput').value); $('tagInput').value=''; } });
-function addTag(t){ t=t.replace(/,/g,'').trim().toLowerCase(); if(t&&!curTags.includes(t)){ curTags.push(t); renderTags(); } }
+function addTag(t){ t=t.replace(/,/g,'').trim().toLowerCase(); if(t&&!curTags.includes(t)){ curTags.push(t); renderTags(); saveDraft(); } }
 function renderTags(){
   $('tagChips').innerHTML = curTags.map((t,i)=>'<span class="chip">'+esc(t)+' <b data-i="'+i+'">✕</b></span>').join('');
   $('tagChips').querySelectorAll('b').forEach(b=> b.onclick=()=>{ curTags.splice(+b.dataset.i,1); renderTags(); });
@@ -881,8 +885,35 @@ $('saveBtn').onclick = async ()=>{
   }catch(e){ toast('Errore di salvataggio'); }
   $('saveBtn').disabled=false;
 };
+/* bozza: ogni cosa scritta viene salvata subito, se l'app si chiude la ritrovi */
+let draftTimer=null;
+function saveDraft(){ clearTimeout(draftTimer); draftTimer=setTimeout(async ()=>{
+  try{
+    const d={desc:$('desc').value, tags:curTags, qty:$('qty').value, cat:$('catSel').value, state:$('stateSel').value, editId, photo:curPhoto,
+             mDesc:$('modalBg').classList.contains('show')?$('mDesc').value:'', mTags:$('mTags').value, lotId:openLotId};
+    const empty=!d.desc.trim() && !d.tags.length && !d.photo && !d.mDesc.trim();
+    if(empty) await store.delete('draft'); else await store.set('draft', d);
+  }catch(e){}
+}, 400); }
+['desc','qty','catSel','stateSel','tagInput','mDesc','mTags'].forEach(id=>{ $(id).addEventListener('input',saveDraft); $(id).addEventListener('change',saveDraft); });
+async function restoreDraft(){
+  try{
+    const r=await store.get('draft'); if(!r) return; const d=r.value;
+    if(d.desc||d.photo||(d.tags&&d.tags.length)){
+      editId=d.editId&&index.some(x=>x.id===d.editId)?d.editId:null;
+      $('desc').value=d.desc||''; curTags=d.tags||[]; renderTags(); $('qty').value=d.qty||1;
+      if(d.cat) $('catSel').value=d.cat; if(d.state) $('stateSel').value=d.state;
+      curPhoto=d.photo||null; showPhoto(curPhoto);
+      if(editId) $('saveBtn').textContent='Aggiorna pezzo';
+      toast('Bozza recuperata ✓');
+    }
+    if(d.mDesc && d.lotId){ pendingDraftM={lotId:d.lotId, text:d.mDesc, tags:d.mTags||''}; toast('Testo del pezzo nel lotto recuperato: riapri il lotto'); }
+  }catch(e){}
+}
+let pendingDraftM=null;
 function resetForm(){
   editId=null; curPhoto=null; curTags=[]; showPhoto(null);
+  store.delete('draft').catch(()=>{});
   $('desc').value=''; $('qty').value=1; renderTags();
   nfcWanted=false; $('nfcOpt').classList.remove('on');
   $('saveBtn').textContent='Salva e passa al prossimo';
@@ -1123,10 +1154,11 @@ function openModal(previewB64){
   if(previewB64){ $('modalPrev').style.display='block'; $('modalPrevImg').src=previewB64; }
   else $('modalPrev').style.display='none';
   $('mDesc').value=''; $('mTags').value=''; $('mQty').value=1;
+  if(pendingDraftM && pendingDraftM.lotId===openLotId){ $('mDesc').value=pendingDraftM.text; $('mTags').value=pendingDraftM.tags; pendingDraftM=null; toast('Testo recuperato ✓'); }
   $('modalBg').classList.add('show');
   setTimeout(()=>$('mDesc').focus(),100);
 }
-$('mCancel').onclick=()=>{ pendingPiece=null; $('modalBg').classList.remove('show'); };
+$('mCancel').onclick=()=>{ pendingPiece=null; $('modalBg').classList.remove('show'); saveDraft(); };
 $('mSave').onclick=async ()=>{
   if(!pendingPiece||!openLotId) return;
   const l=lotById(openLotId);
@@ -1150,7 +1182,7 @@ $('mSave').onclick=async ()=>{
     index.unshift(item);
     await saveIndex();
     toast(pendingPiece.type==='marker'?'Pezzo segnato ✓':'Pezzo ritagliato ✓ lo trovi tra i pezzi sciolti');
-    pendingPiece=null; $('modalBg').classList.remove('show');
+    pendingPiece=null; $('modalBg').classList.remove('show'); $('mDesc').value=''; $('mTags').value=''; saveDraft();
     renderLotMarkers(); renderLotPieces(); updateCounters();
   }catch(e){ toast('Errore di salvataggio'); }
 };
@@ -1374,11 +1406,22 @@ $('syncConnect').onclick=async ()=>{
     meta.dirtyPhotos=[...new Set([...(meta.dirtyPhotos||[]), ...ph])]; meta.remoteHead=null; await saveMeta();
     $('syncToken').value='';
     renderSyncCard(); toast('Collegato ✓ sincronizzo…');
+    document.querySelectorAll('#recoverHint').forEach(e=>e.remove());
     sync();
   }catch(e){ cfg=prev; toast(e.message||'Errore di collegamento'); }
   finally{ $('syncConnect').disabled=false; $('syncConnect').textContent='Collega'; }
 };
 $('syncNow').onclick=()=>sync();
+$('syncCopyKey').onclick=async ()=>{
+  if(!cfg) return;
+  try{ await navigator.clipboard.writeText(cfg.token); toast('Chiave copiata: incollala dove serve, poi non condividerla'); }
+  catch(e){ prompt('Copia la chiave:', cfg.token); }
+};
+function showRecoverHint(){
+  const html='<div class="exp" id="recoverHint" style="margin:0 0 14px;border:2px solid var(--volt)"><span class="tape volt">Archivio vuoto qui</span><div class="hint" style="margin-top:8px;margin-bottom:0">Hai già inventariato da un\'altra icona, browser o dispositivo? I dati sono al sicuro su GitHub: <b>collega la sincronizzazione</b> e li ritrovi tutti, foto comprese.</div><div class="row"><button class="btn-volt" id="recoverGo">Collega e recupera</button></div></div>';
+  ['v-cap','v-search'].forEach(v=>{ const sec=$(v); if(sec && !sec.querySelector('#recoverHint')) sec.insertAdjacentHTML('afterbegin', html.replace('id="recoverHint"','id="recoverHint" data-v="'+v+'"').replace('id="recoverGo"','class="recoverGo"')); });
+  document.querySelectorAll('.recoverGo').forEach(b=> b.onclick=()=>{ switchView('v-boxes'); setTimeout(()=>{ $('syncCard').scrollIntoView({behavior:'smooth',block:'start'}); $('syncToken').focus(); },60); });
+}
 $('syncOff2').onclick=async ()=>{
   if(!confirm('Scollegare questo dispositivo dalla sincronizzazione?\nI dati restano qui e sul repository.')) return;
   cfg=null; await store.delete('sync-cfg'); setSyncState('off'); renderSyncCard();
