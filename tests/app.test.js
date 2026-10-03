@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { startServer, launch, device, tap, checker, IMG, dlgText, dlgOk, dlgChoice, overflow, goSet } = require('./helpers');
+const { startServer, launch, device, tap, checker, IMG, dlgText, dlgOk, dlgChoice, overflow, goSet, FAKE_DIR, dirRead } = require('./helpers');
 
 // finto riconoscimento vocale: "detta" una frase dopo l'avvio
 const FAKE_SR = () => {
@@ -241,6 +241,32 @@ module.exports = async function(){
     C.check(await aim.evaluate(async()=>{ try{ const it=await navigator.clipboard.read(); return it.some(i=>i.types.includes('image/png')); }catch(e){ return 'err '+e.message; } })===true, 'Mac: la foto è negli appunti, pronta da incollare');
     C.check(/Incolla/.test(await aim.evaluate(()=>document.querySelector('#photoZone .ai-btn').textContent)), 'Mac: poi si aspetta la risposta');
     C.check(ai.errs.length===0 && aim.errs.length===0 && ai.native===0 && aim.native===0, 'nessun errore JavaScript '+JSON.stringify([...ai.errs,...aim.errs]));
+
+    console.log('app · 8e. copia in una cartella del computer (Chrome sul Mac)');
+    C.check(await p.evaluate(()=>document.getElementById('dirBox').hidden), 'su iPhone la cartella sul computer non viene proposta');
+    const dm = await device(b, srv.url, 'Mac', {init:FAKE_DIR});
+    await dm.setInputFiles('#photoInput',IMG); await dm.waitForTimeout(300);
+    await dm.fill('#desc','Scheda ESP32-S3 N16R8'); await dm.fill('#tagInput','esp32'); await dm.press('#tagInput','Enter'); await tap(dm,'#saveBtn'); await dm.waitForTimeout(300);
+    await dm.evaluate(async()=>{ index[0].box='B07'; await saveIndex(); refreshAll(); });
+    await goSet(dm);
+    C.check(await dm.locator('#dirPick').isVisible() && !(await dm.locator('#dirNow').isVisible()), 'in Backup e file c\'è «Scegli la cartella»');
+    await dm.evaluate(()=>{ window.__dirCancel=true; }); await tap(dm,'#dirPick'); await dm.waitForTimeout(200);
+    C.check(await dm.evaluate(()=>dirH===null), 'scelta annullata: non cambia niente');
+    await dm.evaluate(()=>{ window.__dirCancel=false; }); await tap(dm,'#dirPick'); await dm.waitForFunction(()=>dirSt.state==='ok',null,{timeout:8000});
+    const md = await dirRead(dm,'Inventario/inventario.md');
+    C.check(!!md && md.includes('Scheda ESP32-S3 N16R8') && md.includes('B07'), 'nella cartella c\'è Inventario/inventario.md con pezzo e scatola');
+    C.check(!!(await dirRead(dm,'Inventario/inventario.json')) && !!(await dirRead(dm,'Inventario/inventario.csv')) && !!(await dirRead(dm,'Inventario/LEGGIMI.md')), 'e anche json, csv e LEGGIMI.md');
+    const pid = await dm.evaluate(()=>index[0].id);
+    C.check((await dirRead(dm,'Inventario/foto/pezzi/'+pid+'.jpg',true))>500, 'la foto del pezzo è in Inventario/foto/pezzi/');
+    C.check(/Scrivania \/ Inventario/.test(await dm.textContent('#dirInfo')) && /1 voci, 1 foto/.test(await dm.textContent('#dirInfo')) && /cartella attiva/.test(await dm.textContent('#ssBkp')), 'la sezione dice dove sta la copia e quando è stata aggiornata');
+    await dm.click('nav button[data-v=v-cap]'); await dm.fill('#desc','Viti M3x10'); await tap(dm,'#saveBtn');
+    await dm.waitForFunction(()=>dirSt.state==='ok' && dirSt.items===2,null,{timeout:8000});
+    C.check((await dirRead(dm,'Inventario/inventario.md')).includes('Viti M3x10'), 'ogni salvataggio aggiorna la cartella da solo');
+    await dm.reload(); await dm.waitForTimeout(800);
+    C.check(await dm.evaluate(()=>!!dirH && dirSt.state==='ok'), 'alla riapertura la copia resta attiva');
+    await goSet(dm); await tap(dm,'#dirOff'); await dm.waitForTimeout(200);
+    C.check(await dm.evaluate(()=>dirH===null) && await dm.locator('#dirPick').isVisible() && !!(await dirRead(dm,'Inventario/inventario.md')), '«Stacca» ferma la copia ma lascia i file');
+    C.check(dm.errs.length===0 && dm.native===0, 'nessun errore JavaScript '+JSON.stringify(dm.errs));
 
     console.log('app · 9. tutto dentro lo schermo (320 px, iPhone SE)');
     await p.setViewportSize({width:320, height:640});

@@ -492,6 +492,15 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
       <button class="btn" id="impBtn" type="button">Importa…</button>
     </div>
     <input type="file" id="impInput" accept=".zip,.json,application/zip,application/json" hidden>
+    <div id="dirBox" hidden>
+      <div class="hint" style="margin-top:12px"><b>Cartella sul computer.</b> Una copia sempre aggiornata (elenco, dati, foto) in una cartella, per esempio sulla Scrivania: comoda da far leggere a un'AI. Si aggiorna mentre questa pagina è aperta.</div>
+      <div class="hint" id="dirInfo" style="margin-top:6px"></div>
+      <div class="btns">
+        <button class="btn pri" id="dirPick" type="button">📁 Scegli la cartella…</button>
+        <button class="btn pri" id="dirNow" type="button" hidden>Aggiorna ora</button>
+        <button class="btn danger" id="dirOff" type="button" hidden>Stacca</button>
+      </div>
+    </div>
     <div class="hint" id="storageInfo" style="margin-top:10px"></div>
   </details>
 
@@ -502,7 +511,7 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 
   <details class="card pad set">
     <summary><h3>Informazioni</h3><span class="ss" id="ssInfo"></span><span class="chev">›</span></summary>
-    <div class="sub">v5.3.0 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
+    <div class="sub">v5.4.0 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
   </details>
 </section>
 
@@ -692,6 +701,7 @@ let ui = {arch:'lab', theme:'salvia', mic:'auto'};   // preferenze di QUESTO dis
 let photoCache = {};
 let curPhoto = null, curLotPhoto = null;
 let curPhotoHi = null;         // stessa foto più nitida, tenuta solo in memoria per "Chiedi a Claude"
+let dirH = null, dirSt = {state:'off'}, dirBusy = false, dirAgain = false, dirTimer = null;   // copia in una cartella del computer
 let aiWait = null;             // 'cap' | 'modal': domanda fatta, si aspetta la risposta da incollare
 const aiSt = {cap:{}, modal:{}};   // per non accumulare testo se incolli due volte
 let curTags = [];
@@ -793,7 +803,7 @@ async function loadIndex(){
   takeSnap(); applyTheme();
   refreshAll(); renderSettings(); updateBackupBadge(); handleHash(); restoreDraft();
   try{ if(navigator.storage&&navigator.storage.persist) await navigator.storage.persist(); }catch(e){}
-  updateStorageInfo();
+  updateStorageInfo(); dirLoad();
   if(cfg) sync();
 }
 /* ogni modifica ai dati passa da qui: assegna upd ai record cambiati e registra le cancellazioni */
@@ -806,13 +816,13 @@ async function saveIndex(){
     await persistIndex();
     if(changed){ meta.lastChange=now; meta.changeSeq=(meta.changeSeq||0)+1; }
     await saveMeta(); updateBackupBadge();
-    if(changed) scheduleSync();
+    if(changed){ scheduleSync(); dirSchedule(); }
   }
   catch(e){ toast('Errore salvataggio'); }
 }
 async function putPhoto(id, b64){
   if(photoCache[id]===b64) return;
-  await store.set('photo-'+id, b64); photoCache[id]=b64;
+  await store.set('photo-'+id, b64); photoCache[id]=b64; dirRedo.add(id);
   if(!(meta.dirtyPhotos||[]).includes(id)){ meta.dirtyPhotos=[...(meta.dirtyPhotos||[]), id]; await saveMeta(); }
 }
 async function dropPhoto(id){ try{ await store.delete('photo-'+id); }catch(e){} delete photoCache[id]; }
@@ -991,7 +1001,7 @@ async function sync(){
     }
     if(!done) throw Object.assign(new Error('conflitto'),{status:-1});
     await saveMeta();
-    setSyncState('ok');
+    setSyncState('ok'); dirSchedule(pulled?300:1500);
     if(pulled) toast('Aggiornato dal cloud ✓');
   }catch(e){
     await saveMeta();
@@ -1278,6 +1288,87 @@ document.addEventListener('click', e=>{
 }));
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && aiWait) toast('Copiata la risposta? Tocca 📋 Incolla'); });
 aiRefresh();
+
+/* ================= copia in una cartella del computer =================
+   Solo Chrome/Edge su Mac o PC (File System Access API): l'utente sceglie una cartella (es. la Scrivania)
+   e l'app ci tiene dentro "Inventario/" con gli stessi file del deposito dati: inventario.md/.json/.csv,
+   LEGGIMI.md e foto/. Serve per far leggere l'archivio a un'AI o sfogliarlo dal Finder.
+   Si scrive solo, non si cancella mai niente nella cartella. */
+const DIR_OK = 'showDirectoryPicker' in window && !/iPhone|iPad|iPod/.test(navigator.userAgent);   // (IOS è dichiarato più sotto)
+const dirRedo = new Set();          // foto cambiate, da riscrivere
+const dirHave = new Set();          // foto che so già presenti nella cartella
+let dirTxt = {};                    // ultimo testo scritto per file, per non riscrivere a vuoto
+function dirSchedule(ms=3000){ if(!dirH) return; clearTimeout(dirTimer); dirTimer=setTimeout(()=>dirSync(), ms); }
+async function dirPerm(ask){
+  if(!dirH) return 'none';
+  if(!dirH.queryPermission) return 'granted';
+  try{ let p=await dirH.queryPermission({mode:'readwrite'}); if(p!=='granted' && ask) p=await dirH.requestPermission({mode:'readwrite'}); return p; }catch(e){ return 'denied'; }
+}
+const dirSub = () => /inventario/i.test(dirH.name) ? '' : 'Inventario';
+async function dirRoot(){ return dirSub() ? await dirH.getDirectoryHandle(dirSub(),{create:true}) : dirH; }
+async function dirPut(dir, name, data){ const fh=await dir.getFileHandle(name,{create:true}); const w=await fh.createWritable(); await w.write(data); await w.close(); }
+async function dirHas(dir, name){ try{ await dir.getFileHandle(name); return true; }catch(e){ return false; } }
+async function dirSync(ask=false){
+  if(!dirH) return;
+  if(dirBusy){ dirAgain=true; return; }
+  if(await dirPerm(ask)!=='granted'){ dirSt={state:'ask'}; renderDir(); return; }
+  dirBusy=true;
+  try{
+    const root=await dirRoot();
+    const files={'inventario.md':buildMarkdown(), 'inventario.json':JSON.stringify(buildJson(),null,1), 'inventario.csv':buildCsv(), 'LEGGIMI.md':README_AI};
+    for(const [n,t] of Object.entries(files)) if(dirTxt[n]!==t){ await dirPut(root,n,t); dirTxt[n]=t; }
+    const ids=[...index.filter(i=>i.hasPhoto).map(i=>i.id), ...lots.map(l=>l.id)];
+    let have=0, miss=0; const sub={};
+    for(const id of ids){
+      const path=photoPath(id); if(!path) continue;
+      const parts=path.split('/'), name=parts.pop(), key=parts.join('/');
+      if(dirHave.has(id) && !dirRedo.has(id)){ have++; continue; }
+      if(!sub[key]){ let d=root; for(const seg of parts) d=await d.getDirectoryHandle(seg,{create:true}); sub[key]=d; }
+      if(!dirRedo.has(id) && await dirHas(sub[key], name)){ dirHave.add(id); have++; continue; }
+      const b64=await getPhoto(id);
+      if(!b64){ miss++; continue; }
+      await dirPut(sub[key], name, await (await fetch(b64)).blob());
+      dirHave.add(id); dirRedo.delete(id); have++;
+      if(have%5===0){ dirSt={state:'run', n:have, tot:ids.length}; renderDir(); }
+    }
+    dirSt={state:'ok', at:Date.now(), items:index.length, photos:have, miss};
+  }catch(e){
+    dirSt={state:'error', msg:(e && e.name==='NotFoundError')?'la cartella non c\'è più: sceglila di nuovo':'non riesco a scrivere nella cartella'+(e&&e.name?' ('+e.name+')':'')};
+    dirTxt={}; dirHave.clear();
+  }finally{
+    dirBusy=false; renderDir();
+    if(dirAgain){ dirAgain=false; dirSchedule(500); }
+  }
+}
+function renderDir(){
+  const box=$('dirBox'); if(!box) return;
+  box.hidden=!DIR_OK; if(!DIR_OK) return;
+  const on=!!dirH, st=dirSt, where=on?'📁 '+esc(dirH.name)+(dirSub()?' / '+dirSub():''):'';
+  $('dirPick').hidden=on; $('dirOff').hidden=!on; $('dirNow').hidden=!on;
+  $('dirNow').textContent = st.state==='ask' ? 'Riattiva la copia' : 'Aggiorna ora';
+  $('dirInfo').innerHTML = !on ? '' :
+    st.state==='ok' ? where+' · aggiornata alle '+new Date(st.at).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+' · '+st.items+' voci, '+st.photos+' foto'+(st.miss?' ('+st.miss+' foto non ancora scaricate)':'') :
+    st.state==='run' ? where+' · copio le foto… '+st.n+' di '+st.tot :
+    st.state==='ask' ? where+' · <b>in pausa</b>: il browser chiede di nuovo il permesso. Tocca «Riattiva la copia» e scegli «Consenti a ogni visita».' :
+    st.state==='error' ? where+' · ⚠ '+esc(st.msg) : where;
+  updSetSum();
+}
+async function dirLoad(){
+  if(!DIR_OK){ renderDir(); return; }
+  try{ const r=await store.get('dir-handle'); if(r && r.value) dirH=r.value; }catch(e){}
+  renderDir();
+  if(dirH){ await dirSync(); if(dirSt.state==='ask') toast('Cartella sul computer in pausa: Opzioni → Backup e file'); }
+}
+$('dirPick').onclick=async ()=>{
+  let h=null;
+  try{ h=await window.showDirectoryPicker({id:'inventario', mode:'readwrite', startIn:'desktop'}); }catch(e){ return; }   // annullato
+  dirH=h; dirTxt={}; dirHave.clear(); dirSt={state:'run', n:0, tot:index.filter(i=>i.hasPhoto).length+lots.length};
+  try{ await store.set('dir-handle', h); }catch(e){}
+  renderDir(); await dirSync(true);
+  if(dirSt.state==='ok') toast('Copia nella cartella pronta ✓');
+};
+$('dirNow').onclick=async ()=>{ dirTxt={}; await dirSync(true); if(dirSt.state==='ok') toast('Cartella aggiornata ✓'); };
+$('dirOff').onclick=async ()=>{ dirH=null; dirSt={state:'off'}; dirTxt={}; dirHave.clear(); try{ await store.delete('dir-handle'); }catch(e){} renderDir(); toast('Copia staccata: i file già scritti restano nella cartella'); };
 
 /* ================= segmenti ================= */
 function setSeg(lot){ $('segLot').classList.toggle('on',lot); $('segSingle').classList.toggle('on',!lot); $('capLot').hidden=!lot; $('capSingle').hidden=lot; }
@@ -2184,6 +2275,7 @@ async function wipeLocal(){
   for(const k of await store.keys()) if(String(k).startsWith('photo-')) await store.delete(k);
   photoCache={}; setData({}); takeSnap(); await persistIndex();
   try{ await store.delete('draft'); }catch(e){}
+  dirH=null; dirSt={state:'off'}; dirTxt={}; dirHave.clear(); try{ await store.delete('dir-handle'); }catch(e){} renderDir();   // la cartella apparteneva all'altro inventario
   meta={...meta, changeSeq:0, pushedSeq:0, remoteHead:null, dirtyPhotos:[], lastSync:0, lastChange:0}; await saveMeta();
   ui.arch='lab'; await saveUI();
   compSel.clear(); filters={box:null,cat:null}; showOnly=null;
@@ -2414,6 +2506,7 @@ function updSetSum(){
   set('ssMic', ui.mic==='keyboard'?'tastiera':'automatica');
   const hm = meta.lastSync ? new Date(meta.lastSync).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '';
   set('ssSync', cfg ? (syncState==='error'?'⚠ errore':syncState==='offline'?'offline':'attiva'+(hm?' · '+hm:'')) : 'non attiva');
+  set('ssBkp', dirSt.state==='ok'?'cartella attiva':dirSt.state==='ask'?'cartella in pausa':dirSt.state==='error'?'⚠ cartella':'');
   const vv=document.querySelector('#v-set .sub'); set('ssInfo', vv?vv.textContent.split('·')[0].trim():'');
 }
 $('v-set').addEventListener('click', ()=>setTimeout(updSetSum,60));

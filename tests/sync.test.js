@@ -1,5 +1,5 @@
 // Sincronizzazione iPhone ↔ Mac con finto GitHub: invio, ricezione, offline, conflitti, niente commit inutili
-const { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, goSet, dlgOk, dlgChoice } = require('./helpers');
+const { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, goSet, dlgOk, dlgChoice, FAKE_DIR, dirRead } = require('./helpers');
 
 module.exports = async function(){
   const srv = await startServer(); const b = await launch(); const G = mockGitHub(); const C = checker();
@@ -96,6 +96,19 @@ module.exports = async function(){
     await guest.goto(srv.url+'#join=robaccia'); await guest.waitForTimeout(500);
     C.check(await guest.evaluate(n=>cfg.repo==='luca/dati' && index.length===n, nRemote), 'un link non valido non cambia niente');
     C.check(guest.errs.length===0 && other.errs.length===0 && fresh.errs.length===0, 'nessun errore JavaScript negli inviti '+JSON.stringify([...guest.errs,...other.errs,...fresh.errs]));
+    console.log('sync · 8. Mac con la cartella sul computer: riceve dal telefono e la tiene aggiornata');
+    const mac2 = await device(b, srv.url, 'Mac', {github:G, init:FAKE_DIR});
+    await connect(mac2); await waitSync(mac2);
+    await tap(mac2,'#dirPick'); await mac2.waitForFunction(()=>dirSt.state==='ok',null,{timeout:15000});
+    const nPh = await mac2.evaluate(()=>index.filter(i=>i.hasPhoto).length+lots.length);
+    C.check(await mac2.evaluate(n=>dirSt.photos===n && dirSt.miss===0, nPh) && nPh>=2, 'le foto fatte col telefono vengono scaricate e copiate nella cartella ('+nPh+')');
+    const lotId = await mac2.evaluate(()=>lots[0].id);
+    C.check((await dirRead(mac2,'Inventario/foto/lotti/'+lotId+'.jpg',true))>500 && (await dirRead(mac2,'Inventario/inventario.md')).includes('Batteria LiPo 4S'), 'cartella completa: elenco e foto del lotto');
+    await ph.evaluate(async()=>{ index.unshift({id:'nuovo-tel',box:'B02',cat:'Vario',desc:'Cavetto JST dal telefono',tags:['jst'],qty:4,state:'Nuovo',hasPhoto:false,nfc:false,lotId:null,light:false,marker:null,ts:Date.now()}); await saveIndex(); });
+    await waitSync(ph); await mac2.evaluate(()=>sync()); await waitSync(mac2);
+    await mac2.waitForFunction(()=>dirSt.state==='ok' && dirSt.items===index.length && index.some(i=>i.id==='nuovo-tel'),null,{timeout:8000}); await mac2.waitForTimeout(600);
+    C.check((await dirRead(mac2,'Inventario/inventario.md')).includes('Cavetto JST dal telefono'), 'un pezzo aggiunto dal telefono arriva nella cartella del Mac senza fare niente');
+    C.check(mac2.errs.length===0, 'nessun errore JavaScript con la cartella '+JSON.stringify(mac2.errs));
     C.check(ph.errs.length===0 && mac.errs.length===0, 'nessun errore JavaScript '+JSON.stringify([...ph.errs,...mac.errs]));
   } finally { await b.close(); srv.close(); }
   return C.failed;

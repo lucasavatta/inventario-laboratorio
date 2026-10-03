@@ -61,6 +61,17 @@ Riconoscere un pezzo dalla foto **senza chiavi API e senza servizi a pagamento**
 - Per il riconoscimento si usa `curPhotoHi` (1600 px, solo in memoria); nel deposito resta la foto a 700 px.
 - **Da verificare sull'iPhone reale:** che l'app Claude compaia in "Condividi" e riceva foto **e** testo insieme (la guida di Anthropic documenta solo il testo). Se arriva solo la foto, la domanda si incolla: è già negli appunti.
 
+## Cartella sul computer (v5.4)
+
+Opzioni → Backup e file → **Scegli la cartella** (solo dove esiste `showDirectoryPicker`: Chrome/Edge su Mac o PC, mai su iPhone). L'app tiene in `<cartella scelta>/Inventario/` gli stessi file del deposito dati (`inventario.md/.json/.csv`, `LEGGIMI.md`, `foto/pezzi`, `foto/lotti`), così un'AI o il Finder possono consultare l'archivio senza GitHub.
+
+- `dirSync()`: riscrive i testi solo se cambiati (`dirTxt`), copia le foto mancanti scaricandole con `getPhoto` (quindi sul Mac arrivano anche quelle fatte col telefono). Parte da `dirSchedule()` dopo ogni `saveIndex()` e dopo ogni sincronizzazione riuscita, e all'apertura (`dirLoad`).
+- La maniglia della cartella sta in IndexedDB (`dir-handle`). Se il browser chiede di nuovo il permesso lo stato è `ask` («in pausa») e serve un tocco su «Riattiva la copia».
+- **Si scrive soltanto**: nella cartella non si cancella mai niente (le foto di pezzi eliminati restano, come nel deposito).
+- La copia si aggiorna **solo mentre la pagina è aperta** in quel browser.
+- `DIR_OK` non può usare `IOS` (dichiarato più sotto nel file: darebbe errore all'avvio).
+- Nei test: `FAKE_DIR` (cartella privata del browser al posto della Scrivania) e `dirRead`. **Da verificare sul Mac reale:** la finestra di scelta e il permesso «Consenti a ogni visita».
+
 ## Modello dati (IndexedDB locale)
 
 Database `inventario-officina`, object store `kv` (chiave → valore), con wrapper `store.get/set/delete/keys/clear`.
@@ -73,6 +84,7 @@ Database `inventario-officina`, object store `kv` (chiave → valore), con wrapp
 | `sync-cfg` | `{repo, token, branch}`: chiave GitHub del dispositivo |
 | `draft` | bozza del modulo in corso (testo, tag, quantità, foto), ripristinata alla riapertura |
 | `ui` | preferenze del dispositivo, non sincronizzate: `{arch, theme, mic}` |
+| `dir-handle` | maniglia della cartella sul computer (solo Chrome desktop), non sincronizzata |
 
 - **item:** `id, arch, box (null = da sistemare), cat, desc, tags[], qty, state, hasPhoto, nfc, lotId, light, marker{x,y}, ts, upd` (`arch` assente = `lab`)
   - `light=true` → pezzo **segnato** sulla foto del lotto (niente foto propria, segue la scatola del lotto)
@@ -126,8 +138,8 @@ npx playwright install chromium     # oppure CHROMIUM_PATH=/percorso/chromium
 npm test
 ```
 
-- `app.test.js`: **rilascio** (sw.js non vuoto, stessa versione di index.html, app riapribile senza rete), **Chiedi a Claude** (finto "Condividi", incolla, Mac), rilievo, Foto Lotto, segna/ritaglia, composizione, NFC (link copiato, apertura `#b=`), scatole con nome e posto, ricerca, export/import ZIP, dettatura (finto riconoscimento vocale: funzionante, bloccato, assente), bozza, archivi, temi, **niente scorrimento laterale a 320 px e campi a 16px**, nessun dialogo nativo, scheda di recupero.
-- `sync.test.js`: due dispositivi (iPhone e Mac simulati) contro un **finto GitHub** in `helpers.js`: invio, ricezione, foto scaricate quando servono, offline con coda, conflitti, archivi e nomi delle scatole, nessun commit inutile, **link d'invito** (dispositivo nuovo, dispositivo già collegato altrove, deposito vuoto, link non valido).
+- `app.test.js`: **rilascio** (sw.js non vuoto, stessa versione di index.html, app riapribile senza rete), **Chiedi a Claude** (finto "Condividi", incolla, Mac), **cartella sul computer**, rilievo, Foto Lotto, segna/ritaglia, composizione, NFC (link copiato, apertura `#b=`), scatole con nome e posto, ricerca, export/import ZIP, dettatura (finto riconoscimento vocale: funzionante, bloccato, assente), bozza, archivi, temi, **niente scorrimento laterale a 320 px e campi a 16px**, nessun dialogo nativo, scheda di recupero.
+- `sync.test.js`: due dispositivi (iPhone e Mac simulati) contro un **finto GitHub** in `helpers.js`: invio, ricezione, foto scaricate quando servono, offline con coda, conflitti, archivi e nomi delle scatole, nessun commit inutile, **cartella sul Mac che riceve dal telefono**, **link d'invito** (dispositivo nuovo, dispositivo già collegato altrove, deposito vuoto, link non valido).
 - Helper per i dialoghi dell'app: `dlgText`, `dlgOk`, `dlgChoice`; `overflow(p)` elenca gli elementi più larghi dello schermo.
 - Ogni bug corretto va coperto da un controllo nei test. Usa `tap()` per i pulsanti che possono finire sotto la barra fissa.
 
@@ -142,7 +154,6 @@ npm test
 
 - Componenti con **varianti e quantità** (es. resistenze: valore → pezzi), ricercabili per valore.
 - Stampa di **etichette QR** per le scatole (alternativa economica ai tag NFC).
-- Copia dell'archivio in una **cartella sul Mac** (File System Access API, solo Chrome desktop).
 - Esperimento: tag con `googlechromes://` per aprire Chrome invece di Safari (non verificato).
 - Pulizia delle foto orfane nel repo dati.
 - Licenza del codice da decidere (al momento nessuna = tutti i diritti riservati). L'utente ha valutato di distribuire o vendere l'app.

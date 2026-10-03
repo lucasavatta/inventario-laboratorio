@@ -98,10 +98,18 @@ const overflow = p => p.evaluate(()=>{
 const goSet = async p => { await p.click('nav button[data-v=v-set]'); await p.evaluate(()=>document.querySelectorAll('#v-set details').forEach(d=>d.open=true)); await p.waitForTimeout(100); };
 const waitSync = async p => { await p.waitForTimeout(300); await p.waitForFunction(()=>!/Sincronizzo|in invio/.test(document.getElementById('bkpBadge').textContent),null,{timeout:20000}); };
 
+// finta scelta della cartella (Chrome sul Mac): al posto della Scrivania una cartella privata del browser (OPFS)
+const FAKE_DIR = () => { window.showDirectoryPicker = async () => { if(window.__dirCancel) throw Object.assign(new Error('annullato'),{name:'AbortError'});
+  return (await navigator.storage.getDirectory()).getDirectoryHandle('Scrivania',{create:true}); }; };
+// legge un file dalla finta Scrivania; null se non c'è. Con size:true restituisce i byte
+const dirRead = (p, rel, size) => p.evaluate(async ([rel,size])=>{ try{ let d=await (await navigator.storage.getDirectory()).getDirectoryHandle('Scrivania');
+  const parts=rel.split('/'), name=parts.pop(); for(const seg of parts) d=await d.getDirectoryHandle(seg);
+  const f=await (await d.getFileHandle(name)).getFile(); return size ? f.size : await f.text(); }catch(e){ return null; } }, [rel,size]);
+
 function checker(){
   let failed=0;
   const check=(c,msg)=>{ console.log((c?'  ✓ ':'  ✗ ')+msg); if(!c) failed++; };
   return { check, get failed(){ return failed; } };
 }
 
-module.exports = { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, dlgText, dlgOk, dlgChoice, overflow, goSet };
+module.exports = { startServer, launch, mockGitHub, device, tap, waitSync, checker, IMG, dlgText, dlgOk, dlgChoice, overflow, goSet, FAKE_DIR, dirRead };

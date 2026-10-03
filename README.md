@@ -41,6 +41,10 @@ Serve l'app **Claude** installata sul telefono. Non servono chiavi né abbonamen
 
 Funziona anche sui pezzi ritagliati da una Foto Lotto. Sul Mac il pulsante copia la foto e apre claude.ai con la domanda: lì incolli la foto con ⌘V.
 
+## L'archivio in una cartella del Mac (per farlo leggere a un'AI)
+
+Sul Mac, con **Chrome**: Opzioni → Backup e file → **📁 Scegli la cartella…** → scegli la Scrivania → Consenti. Compare la cartella **Inventario** con `inventario.md` (l'elenco per scatola), i dati e le foto. Si aggiorna da sola ogni volta che apri l'app sul Mac. Se Chrome chiede di nuovo il permesso, tocca «Riattiva la copia» e scegli «Consenti a ogni visita».
+
 ## Archivi (laboratorio, armadio, cantina…)
 
 Opzioni → Archivi → **Nuovo archivio**: si parte da un modello (Armadio, Cantina, vuoto) e si cambiano nome, icona, categorie e stati.
