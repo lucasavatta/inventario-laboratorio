@@ -43,7 +43,7 @@ Funziona anche sui pezzi ritagliati da una Foto Lotto. Sul Mac il pulsante copia
 
 ## L'archivio in una cartella del Mac (per farlo leggere a un'AI)
 
-Sul Mac, con **Chrome**: Opzioni → Backup e file → **📁 Scegli la cartella…** → scegli la Scrivania → Consenti. Compare la cartella **Inventario** con `inventario.md` (l'elenco per scatola), i dati e le foto. Si aggiorna da sola ogni volta che apri l'app sul Mac. Se Chrome chiede di nuovo il permesso, tocca «Riattiva la copia» e scegli «Consenti a ogni visita».
+Sul Mac, con **Chrome**: Opzioni → Backup e file → **📁 Scegli la cartella…** → nella finestra vai sulla Scrivania (o su iCloud Drive), premi **Nuova cartella**, chiamala **Inventario**, selezionala → Consenti. Chrome non lascia scegliere la Scrivania intera, serve una cartella dentro. Nella cartella **Inventario** trovi `inventario.md` (l'elenco per scatola), i dati e le foto. Si aggiorna da sola ogni volta che apri l'app sul Mac. Se Chrome chiede di nuovo il permesso, tocca «Riattiva la copia» e scegli «Consenti a ogni visita».
 
 ## Archivi (laboratorio, armadio, cantina…)
 

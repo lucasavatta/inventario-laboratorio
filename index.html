@@ -493,7 +493,8 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
     </div>
     <input type="file" id="impInput" accept=".zip,.json,application/zip,application/json" hidden>
     <div id="dirBox" hidden>
-      <div class="hint" style="margin-top:12px"><b>Cartella sul computer.</b> Una copia sempre aggiornata (elenco, dati, foto) in una cartella, per esempio sulla Scrivania: comoda da far leggere a un'AI. Si aggiorna mentre questa pagina è aperta.</div>
+      <div class="hint" style="margin-top:12px"><b>Cartella sul computer.</b> Una copia sempre aggiornata (elenco, dati, foto), comoda da far leggere a un'AI. Si aggiorna mentre questa pagina è aperta.</div>
+      <div class="hint" id="dirHow" style="margin-top:6px">Nella finestra che si apre vai sulla Scrivania (o su iCloud Drive), premi <b>Nuova cartella</b>, chiamala <b>Inventario</b> e scegli quella: Chrome non lascia scegliere la Scrivania intera.</div>
       <div class="hint" id="dirInfo" style="margin-top:6px"></div>
       <div class="btns">
         <button class="btn pri" id="dirPick" type="button">📁 Scegli la cartella…</button>
@@ -511,7 +512,7 @@ nav button .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(
 
   <details class="card pad set">
     <summary><h3>Informazioni</h3><span class="ss" id="ssInfo"></span><span class="chev">›</span></summary>
-    <div class="sub">v5.4.0 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
+    <div class="sub">v5.4.1 · Inventario · Rilievo · Lotti · Scatole · Archivi</div>
   </details>
 </section>
 
@@ -1344,7 +1345,7 @@ function renderDir(){
   const box=$('dirBox'); if(!box) return;
   box.hidden=!DIR_OK; if(!DIR_OK) return;
   const on=!!dirH, st=dirSt, where=on?'📁 '+esc(dirH.name)+(dirSub()?' / '+dirSub():''):'';
-  $('dirPick').hidden=on; $('dirOff').hidden=!on; $('dirNow').hidden=!on;
+  $('dirPick').hidden=on; $('dirHow').hidden=on; $('dirOff').hidden=!on; $('dirNow').hidden=!on;
   $('dirNow').textContent = st.state==='ask' ? 'Riattiva la copia' : 'Aggiorna ora';
   $('dirInfo').innerHTML = !on ? '' :
     st.state==='ok' ? where+' · aggiornata alle '+new Date(st.at).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+' · '+st.items+' voci, '+st.photos+' foto'+(st.miss?' ('+st.miss+' foto non ancora scaricate)':'') :
@@ -2383,7 +2384,8 @@ function buildMarkdown(){
 }
 const README_AI = `# Archivio Inventario — come leggerlo
 
-Questi sono i dati completi dell'app Inventario: si aggiornano da soli a ogni sincronizzazione (repository privato) oppure arrivano da un export ZIP.
+Questi sono i dati completi dell'app Inventario: si aggiornano da soli a ogni sincronizzazione (repository privato o cartella «Inventario» sul computer) oppure arrivano da un export ZIP.
+La data dell'ultimo aggiornamento è nella prima riga di inventario.md.
 Ci possono essere più **archivi** (es. Laboratorio, Armadio per il cambio di stagione, Cantina), ognuno con le sue scatole.
 
 ## File
@@ -2405,6 +2407,7 @@ Lo storico delle modifiche è nella cronologia dei commit (un commit per ogni si
 
 ## Domande tipo da fare all'AI
 - "Ho ancora una batteria 4S? In che scatola?"
+- "Che flight controller ho? Apri le foto (colonna Foto di inventario.md) e dimmi che componenti montano."
 - "Dove ho messo i maglioni pesanti?"
 - "Cosa mi serve comprare per un drone 5 pollici, considerando quello che ho?"
 - "Guarda le foto dei lotti e dimmi se ci sono pezzi non ancora censiti."

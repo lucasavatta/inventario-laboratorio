@@ -69,6 +69,7 @@ Opzioni → Backup e file → **Scegli la cartella** (solo dove esiste `showDire
 - La maniglia della cartella sta in IndexedDB (`dir-handle`). Se il browser chiede di nuovo il permesso lo stato è `ask` («in pausa») e serve un tocco su «Riattiva la copia».
 - **Si scrive soltanto**: nella cartella non si cancella mai niente (le foto di pezzi eliminati restano, come nel deposito).
 - La copia si aggiorna **solo mentre la pagina è aperta** in quel browser.
+- **Chrome blocca alcune cartelle** (verificato nel sorgente di Chromium, `kBlockedPaths`): non si possono scegliere la cartella utente, la **Scrivania intera**, Documenti interi, la radice di iCloud Drive; le loro **sottocartelle sì**. Per questo l'utente crea e sceglie una cartella «Inventario» (se il nome contiene «inventario» l'app scrive lì dentro, altrimenti crea la sottocartella `Inventario`).
 - `DIR_OK` non può usare `IOS` (dichiarato più sotto nel file: darebbe errore all'avvio).
 - Nei test: `FAKE_DIR` (cartella privata del browser al posto della Scrivania) e `dirRead`. **Da verificare sul Mac reale:** la finestra di scelta e il permesso «Consenti a ogni visita».
 
